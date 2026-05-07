@@ -1,0 +1,25 @@
+[package]
+name = "org-members"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+license = "GPL-3.0-only"
+description = "Immutable binary Sparse Merkle Tree for organisation membership management"
+
+[features]
+default = ["std", "serde"]
+std = ["serde?/std", "thiserror/std", "postcard?/use-std"]
+alloc = ["postcard?/alloc"]
+serde = ["dep:serde", "dep:postcard"]
+wasm = []
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
+postcard = { version = "1", default-features = false, features = ["alloc"], optional = true }
+thiserror = { version = "2", default-features = false }
+unicode-normalization = "0.1"
+blake3 = { version = "1", default-features = false }
+
+[dev-dependencies]
+postcard = { version = "1", features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }
