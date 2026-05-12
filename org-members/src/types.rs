@@ -58,9 +58,9 @@ impl fmt::Debug for MemberId {
 /// by the local-first collaboration layer. Can change over time (e.g., upon
 /// device rotation or key compromise) -- distinct from the immutable `MemberId`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MemberKey(VerifyingKey);
+pub struct P2pMemberKey(VerifyingKey);
 
-impl MemberKey {
+impl P2pMemberKey {
     pub fn new(key: VerifyingKey) -> Self {
         Self(key)
     }
@@ -74,34 +74,34 @@ impl MemberKey {
     }
 }
 
-impl PartialOrd for MemberKey {
+impl PartialOrd for P2pMemberKey {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for MemberKey {
+impl Ord for P2pMemberKey {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.as_bytes().cmp(other.as_bytes())
     }
 }
 
-impl fmt::Debug for MemberKey {
+impl fmt::Debug for P2pMemberKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let b = self.as_bytes();
-        write!(f, "MemberKey({:02x}{:02x}{:02x}{:02x}..)", b[0], b[1], b[2], b[3])
+        write!(f, "P2pMemberKey({:02x}{:02x}{:02x}{:02x}..)", b[0], b[1], b[2], b[3])
     }
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for MemberKey {
+impl serde::Serialize for P2pMemberKey {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         self.as_bytes().serialize(s)
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for MemberKey {
+impl<'de> serde::Deserialize<'de> for P2pMemberKey {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let bytes = <[u8; 32]>::deserialize(d)?;
         let vk = VerifyingKey::from_bytes(&bytes).map_err(serde::de::Error::custom)?;
@@ -112,9 +112,9 @@ impl<'de> serde::Deserialize<'de> for MemberKey {
 /// A device's ed25519 public key. Serves as both the device's identity and
 /// signing key. (For devices, key and id are the same thing.)
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DeviceKey(VerifyingKey);
+pub struct P2pDeviceKey(VerifyingKey);
 
-impl DeviceKey {
+impl P2pDeviceKey {
     pub fn new(key: VerifyingKey) -> Self {
         Self(key)
     }
@@ -128,34 +128,34 @@ impl DeviceKey {
     }
 }
 
-impl PartialOrd for DeviceKey {
+impl PartialOrd for P2pDeviceKey {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for DeviceKey {
+impl Ord for P2pDeviceKey {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.as_bytes().cmp(other.as_bytes())
     }
 }
 
-impl fmt::Debug for DeviceKey {
+impl fmt::Debug for P2pDeviceKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let b = self.as_bytes();
-        write!(f, "DeviceKey({:02x}{:02x}{:02x}{:02x}..)", b[0], b[1], b[2], b[3])
+        write!(f, "P2pDeviceKey({:02x}{:02x}{:02x}{:02x}..)", b[0], b[1], b[2], b[3])
     }
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for DeviceKey {
+impl serde::Serialize for P2pDeviceKey {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         self.as_bytes().serialize(s)
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for DeviceKey {
+impl<'de> serde::Deserialize<'de> for P2pDeviceKey {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let bytes = <[u8; 32]>::deserialize(d)?;
         let vk = VerifyingKey::from_bytes(&bytes).map_err(serde::de::Error::custom)?;
@@ -247,30 +247,30 @@ impl fmt::Debug for RootHash {
 /// Device slots for a member. Fixed depth-2 sub-trie (max 4 devices).
 /// Devices are ed25519 public keys, stored sorted.
 #[derive(Clone, PartialEq, Eq)]
-pub struct DeviceSlots {
-    slots: Vec<DeviceKey>,
+pub struct P2pDeviceSlots {
+    slots: Vec<P2pDeviceKey>,
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for DeviceSlots {
+impl serde::Serialize for P2pDeviceSlots {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         self.slots.serialize(s)
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for DeviceSlots {
+impl<'de> serde::Deserialize<'de> for P2pDeviceSlots {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let slots = Vec::<DeviceKey>::deserialize(d)?;
+        let slots = Vec::<P2pDeviceKey>::deserialize(d)?;
         // Re-run constructor validation so an attacker-supplied wire format
         // cannot bypass invariants (empty list, exceeds MAX_DEVICES, duplicates,
-        // unsorted). `DeviceSlots::new` sorts and checks all of these.
-        DeviceSlots::new(slots).map_err(serde::de::Error::custom)
+        // unsorted). `P2pDeviceSlots::new` sorts and checks all of these.
+        P2pDeviceSlots::new(slots).map_err(serde::de::Error::custom)
     }
 }
 
-impl DeviceSlots {
-    pub fn new(mut devices: Vec<DeviceKey>) -> Result<Self, OrgMembersError> {
+impl P2pDeviceSlots {
+    pub fn new(mut devices: Vec<P2pDeviceKey>) -> Result<Self, OrgMembersError> {
         if devices.is_empty() {
             return Err(OrgMembersError::EmptyDeviceList);
         }
@@ -286,11 +286,11 @@ impl DeviceSlots {
         Ok(Self { slots: devices })
     }
 
-    pub fn devices(&self) -> &[DeviceKey] {
+    pub fn devices(&self) -> &[P2pDeviceKey] {
         &self.slots
     }
 
-    pub fn has_device(&self, device: &DeviceKey) -> bool {
+    pub fn has_device(&self, device: &P2pDeviceKey) -> bool {
         self.slots.binary_search(device).is_ok()
     }
 
@@ -298,7 +298,7 @@ impl DeviceSlots {
         self.slots.len()
     }
 
-    pub fn add_device(&self, device: DeviceKey) -> Result<Self, OrgMembersError> {
+    pub fn add_device(&self, device: P2pDeviceKey) -> Result<Self, OrgMembersError> {
         if self.slots.len() >= MAX_DEVICES {
             return Err(OrgMembersError::DeviceSlotsFull);
         }
@@ -311,7 +311,7 @@ impl DeviceSlots {
         Ok(Self { slots: new_slots })
     }
 
-    pub fn remove_device(&self, device: &DeviceKey) -> Result<Self, OrgMembersError> {
+    pub fn remove_device(&self, device: &P2pDeviceKey) -> Result<Self, OrgMembersError> {
         let idx = self
             .slots
             .binary_search(device)
@@ -324,7 +324,7 @@ impl DeviceSlots {
         Ok(Self { slots: new_slots })
     }
 
-    pub fn to_fixed_slots(&self) -> [Option<DeviceKey>; MAX_DEVICES] {
+    pub fn to_fixed_slots(&self) -> [Option<P2pDeviceKey>; MAX_DEVICES] {
         let mut fixed = [None; MAX_DEVICES];
         for (i, device) in self.slots.iter().enumerate() {
             fixed[i] = Some(*device);
@@ -333,9 +333,9 @@ impl DeviceSlots {
     }
 }
 
-impl fmt::Debug for DeviceSlots {
+impl fmt::Debug for P2pDeviceSlots {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "DeviceSlots({})", self.slots.len())
+        write!(f, "P2pDeviceSlots({})", self.slots.len())
     }
 }
 
@@ -346,12 +346,12 @@ pub struct MemberLeaf {
     id: MemberId,
     /// Validated, NFC-normalized handle string (PII). Can change rarely.
     handle: String,
-    /// The member's CGKA key. Can change over time.
-    key: MemberKey,
+    /// The member's peer-to-peer (CGKA / Keyhive) key. Can change over time.
+    /// Future versions may also add an on-chain key.
+    p2p_key: P2pMemberKey,
     name: String,
     surname: String,
-    group_pk: [u8; 32],
-    devices: DeviceSlots,
+    p2p_devices: P2pDeviceSlots,
 }
 
 #[cfg(feature = "serde")]
@@ -359,11 +359,10 @@ pub struct MemberLeaf {
 struct MemberLeafSerde {
     id: MemberId,
     handle: String,
-    key: MemberKey,
+    p2p_key: P2pMemberKey,
     name: String,
     surname: String,
-    group_pk: [u8; 32],
-    devices: DeviceSlots,
+    p2p_devices: P2pDeviceSlots,
 }
 
 #[cfg(feature = "serde")]
@@ -372,11 +371,10 @@ impl serde::Serialize for MemberLeaf {
         MemberLeafSerde {
             id: self.id,
             handle: self.handle.clone(),
-            key: self.key,
+            p2p_key: self.p2p_key,
             name: self.name.clone(),
             surname: self.surname.clone(),
-            group_pk: self.group_pk,
-            devices: self.devices.clone(),
+            p2p_devices: self.p2p_devices.clone(),
         }
         .serialize(s)
     }
@@ -397,11 +395,10 @@ impl<'de> serde::Deserialize<'de> for MemberLeaf {
         Ok(Self {
             id: raw.id,
             handle: validated_handle,
-            key: raw.key,
+            p2p_key: raw.p2p_key,
             name,
             surname,
-            group_pk: raw.group_pk,
-            devices: raw.devices,
+            p2p_devices: raw.p2p_devices,
         })
     }
 }
@@ -414,22 +411,20 @@ impl MemberLeaf {
     pub fn new(
         id: MemberId,
         handle: &str,
-        key: MemberKey,
+        p2p_key: P2pMemberKey,
         name: &str,
         surname: &str,
-        group_pk: [u8; 32],
-        devices: Vec<DeviceKey>,
+        p2p_devices: Vec<P2pDeviceKey>,
     ) -> Result<Self, OrgMembersError> {
         let validated_handle = validate_handle(handle)?;
-        let device_slots = DeviceSlots::new(devices)?;
+        let device_slots = P2pDeviceSlots::new(p2p_devices)?;
         Ok(Self {
             id,
             handle: validated_handle,
-            key,
+            p2p_key,
             name: to_nfc(name),
             surname: to_nfc(surname),
-            group_pk,
-            devices: device_slots,
+            p2p_devices: device_slots,
         })
     }
 
@@ -437,8 +432,8 @@ impl MemberLeaf {
         &self.id
     }
 
-    pub fn key(&self) -> &MemberKey {
-        &self.key
+    pub fn p2p_key(&self) -> &P2pMemberKey {
+        &self.p2p_key
     }
 
     pub fn handle(&self) -> &str {
@@ -453,28 +448,24 @@ impl MemberLeaf {
         &self.surname
     }
 
-    pub fn group_pk(&self) -> &[u8; 32] {
-        &self.group_pk
+    pub fn p2p_devices(&self) -> &[P2pDeviceKey] {
+        self.p2p_devices.devices()
     }
 
-    pub fn devices(&self) -> &[DeviceKey] {
-        self.devices.devices()
+    pub fn has_p2p_device(&self, device: &P2pDeviceKey) -> bool {
+        self.p2p_devices.has_device(device)
     }
 
-    pub fn has_device(&self, device: &DeviceKey) -> bool {
-        self.devices.has_device(device)
+    pub fn p2p_device_count(&self) -> usize {
+        self.p2p_devices.device_count()
     }
 
-    pub fn device_count(&self) -> usize {
-        self.devices.device_count()
-    }
-
-    pub(crate) fn device_slots(&self) -> &DeviceSlots {
-        &self.devices
+    pub(crate) fn p2p_device_slots(&self) -> &P2pDeviceSlots {
+        &self.p2p_devices
     }
 
     /// Canonical byte encoding for hashing.
-    pub fn canonical_bytes(&self, device_sub_trie_root: &[u8; 32]) -> Vec<u8> {
+    pub fn canonical_bytes(&self, p2p_device_sub_trie_root: &[u8; 32]) -> Vec<u8> {
         let mut buf = Vec::new();
         // id: 32 bytes raw
         buf.extend_from_slice(self.id.as_bytes());
@@ -482,8 +473,8 @@ impl MemberLeaf {
         let handle_bytes = self.handle.as_bytes();
         buf.extend_from_slice(&(handle_bytes.len() as u32).to_le_bytes());
         buf.extend_from_slice(handle_bytes);
-        // member key: 32 bytes raw
-        buf.extend_from_slice(self.key.as_bytes());
+        // p2p_key: 32 bytes raw
+        buf.extend_from_slice(self.p2p_key.as_bytes());
         // name_len + name bytes
         let name_bytes = self.name.as_bytes();
         buf.extend_from_slice(&(name_bytes.len() as u32).to_le_bytes());
@@ -492,10 +483,8 @@ impl MemberLeaf {
         let surname_bytes = self.surname.as_bytes();
         buf.extend_from_slice(&(surname_bytes.len() as u32).to_le_bytes());
         buf.extend_from_slice(surname_bytes);
-        // group_pk: 32 bytes raw
-        buf.extend_from_slice(&self.group_pk);
-        // device_sub_trie_root: 32 bytes raw
-        buf.extend_from_slice(device_sub_trie_root);
+        // p2p_device_sub_trie_root: 32 bytes raw
+        buf.extend_from_slice(p2p_device_sub_trie_root);
         buf
     }
 }
@@ -505,11 +494,10 @@ impl fmt::Debug for MemberLeaf {
         f.debug_struct("MemberLeaf")
             .field("id", &self.id)
             .field("handle", &"[REDACTED]")
-            .field("key", &self.key)
+            .field("p2p_key", &self.p2p_key)
             .field("name", &"[REDACTED]")
             .field("surname", &"[REDACTED]")
-            .field("group_pk", &format_args!("<32 bytes>"))
-            .field("devices", &self.devices)
+            .field("p2p_devices", &self.p2p_devices)
             .finish()
     }
 }

@@ -50,7 +50,7 @@ pub fn insert<H: TrieHasher>(
     defaults: &DefaultHashes,
 ) -> Arc<Node> {
     let id = *member.id();
-    let device_root = compute_device_root::<H>(member.device_slots());
+    let device_root = compute_device_root::<H>(member.p2p_device_slots());
     let new_leaf = Arc::new(Node::leaf(member, device_root));
     insert_at(root, &id, new_leaf, 0, defaults)
 }

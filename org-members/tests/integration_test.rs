@@ -1,7 +1,7 @@
 use ed25519_dalek::SigningKey;
 use org_members::hasher::Blake3Hasher;
 use org_members::trie::OrgTrie;
-use org_members::types::{DeviceKey, MemberId, MemberKey, MemberLeaf, RootHash};
+use org_members::types::{P2pDeviceKey, MemberId, P2pMemberKey, MemberLeaf, RootHash};
 use org_members::OrgMembersError;
 
 type TestTrie = OrgTrie<Blake3Hasher>;
@@ -12,18 +12,18 @@ fn member_id(seed: &str) -> MemberId {
     MemberId::new(hash)
 }
 
-fn member_key(seed: &str) -> MemberKey {
+fn member_key(seed: &str) -> P2pMemberKey {
     let mut bytes = [0u8; 32];
     let hash: [u8; 32] = blake3::hash(seed.as_bytes()).into();
     bytes.copy_from_slice(&hash);
-    MemberKey::new(SigningKey::from_bytes(&bytes).verifying_key())
+    P2pMemberKey::new(SigningKey::from_bytes(&bytes).verifying_key())
 }
 
-fn device_key(seed: &str) -> DeviceKey {
+fn device_key(seed: &str) -> P2pDeviceKey {
     let mut bytes = [0u8; 32];
     let hash: [u8; 32] = blake3::hash(seed.as_bytes()).into();
     bytes.copy_from_slice(&hash);
-    DeviceKey::new(SigningKey::from_bytes(&bytes).verifying_key())
+    P2pDeviceKey::new(SigningKey::from_bytes(&bytes).verifying_key())
 }
 
 fn alice() -> MemberLeaf {
@@ -33,9 +33,7 @@ fn alice() -> MemberLeaf {
         member_key("alice-mk"),
         "Alice",
         "Smith",
-        [1; 32],
-        vec![device_key("alice-d1")],
-    )
+        vec![device_key("alice-d1")])
     .unwrap()
 }
 
@@ -46,9 +44,7 @@ fn bob() -> MemberLeaf {
         member_key("bob-mk"),
         "Bob",
         "Jones",
-        [2; 32],
-        vec![device_key("bob-d1")],
-    )
+        vec![device_key("bob-d1")])
     .unwrap()
 }
 
@@ -59,9 +55,7 @@ fn charlie() -> MemberLeaf {
         member_key("charlie-mk"),
         "Charlie",
         "Brown",
-        [3; 32],
-        vec![device_key("charlie-d1")],
-    )
+        vec![device_key("charlie-d1")])
     .unwrap()
 }
 
@@ -72,9 +66,7 @@ fn jan_jan() -> MemberLeaf {
         member_key("jan-jan-mk"),
         "Jan-Jan",
         "Gödel",
-        [4; 32],
-        vec![device_key("jan-jan-d1"), device_key("jan-jan-d2")],
-    )
+        vec![device_key("jan-jan-d1"), device_key("jan-jan-d2")])
     .unwrap()
 }
 
@@ -85,9 +77,7 @@ fn diana() -> MemberLeaf {
         member_key("diana-mk"),
         "Diana",
         "Prince",
-        [5; 32],
-        vec![device_key("diana-d1")],
-    )
+        vec![device_key("diana-d1")])
     .unwrap()
 }
 
@@ -128,9 +118,7 @@ fn genesis_duplicate_handle_different_id_fails() {
         member_key("different-mk"),
         "Alice2",
         "Different",
-        [99; 32],
-        vec![device_key("d")],
-    )
+        vec![device_key("d")])
     .unwrap();
     let err = TestTrie::genesis(vec![m1, m2]);
     assert_eq!(err.unwrap_err(), OrgMembersError::DuplicateHandle);
@@ -175,9 +163,7 @@ fn insert_duplicate_handle_different_id_fails() {
         member_key("imposter-mk"),
         "I'm",
         "Alice",
-        [99; 32],
-        vec![device_key("imposter-d")],
-    )
+        vec![device_key("imposter-d")])
     .unwrap();
     let err = trie.insert(imposter);
     assert_eq!(err.unwrap_err(), OrgMembersError::DuplicateHandle);
@@ -197,9 +183,7 @@ fn update_existing_member() {
         member_key("alice-rotated-mk"),
         "Alice",
         "Wonderland",
-        [42; 32],
-        vec![device_key("alice-new-d")],
-    )
+        vec![device_key("alice-new-d")])
     .unwrap();
     let trie = trie.update(updated).unwrap();
     let (trie, _) = trie.recalculate().unwrap();
@@ -207,7 +191,7 @@ fn update_existing_member() {
     assert_eq!(trie.member_count(), 1);
     let member = trie.get(&member_id("alice-id")).unwrap();
     assert_eq!(member.surname(), "Wonderland");
-    assert_eq!(member.key(), &member_key("alice-rotated-mk"));
+    assert_eq!(member.p2p_key(), &member_key("alice-rotated-mk"));
     assert_ne!(trie.root_hash().unwrap(), root_before);
 }
 
@@ -227,9 +211,7 @@ fn update_handle_change() {
         member_key("alice-mk"),
         "Alice",
         "Smith",
-        [1; 32],
-        vec![device_key("alice-d1")],
-    )
+        vec![device_key("alice-d1")])
     .unwrap();
     let trie = trie.update(renamed).unwrap();
     let (trie, _) = trie.recalculate().unwrap();
@@ -364,9 +346,7 @@ fn leaf_with_handle(handle: &str) -> Result<MemberLeaf, OrgMembersError> {
         member_key("k"),
         "A",
         "B",
-        [0; 32],
-        vec![device_key("d")],
-    )
+        vec![device_key("d")])
 }
 
 #[test]
@@ -436,9 +416,7 @@ fn genesis_rejects_confusables() {
         member_key("k1"),
         "A",
         "B",
-        [0; 32],
-        vec![device_key("d1")],
-    )
+        vec![device_key("d1")])
     .unwrap();
     let m2 = MemberLeaf::new(
         member_id("k2"),
@@ -446,9 +424,7 @@ fn genesis_rejects_confusables() {
         member_key("k2"),
         "A",
         "B",
-        [0; 32],
-        vec![device_key("d2")],
-    )
+        vec![device_key("d2")])
     .unwrap();
     let err = TestTrie::genesis(vec![m1, m2]).unwrap_err();
     assert_eq!(err, OrgMembersError::ConfusableHandle);
@@ -464,9 +440,7 @@ fn insert_rejects_confusable_handle() {
         member_key("k1"),
         "A",
         "B",
-        [0; 32],
-        vec![device_key("d1")],
-    )
+        vec![device_key("d1")])
     .unwrap();
     let m2 = MemberLeaf::new(
         member_id("k2"),
@@ -474,9 +448,7 @@ fn insert_rejects_confusable_handle() {
         member_key("k2"),
         "A",
         "B",
-        [0; 32],
-        vec![device_key("d2")],
-    )
+        vec![device_key("d2")])
     .unwrap();
 
     let trie = TestTrie::genesis(vec![m1]).unwrap();
@@ -495,9 +467,7 @@ fn update_rejects_confusable_handle() {
         member_key("k1"),
         "A",
         "B",
-        [0; 32],
-        vec![device_key("d1")],
-    )
+        vec![device_key("d1")])
     .unwrap();
     let m2 = alice();
 
@@ -510,9 +480,7 @@ fn update_rejects_confusable_handle() {
         member_key("alice-mk"),
         "Alice",
         "Smith",
-        [1; 32],
-        vec![device_key("alice-d1")],
-    )
+        vec![device_key("alice-d1")])
     .unwrap();
     let err = trie.update(renamed).unwrap_err();
     assert_eq!(err, OrgMembersError::ConfusableHandle);
@@ -549,9 +517,7 @@ fn member_leaf_nfc_normalization() {
         member_key("k"),
         "e\u{0301}",
         "X",
-        [1; 32],
-        vec![device_key("d")],
-    )
+        vec![device_key("d")])
     .unwrap();
     let m2 = MemberLeaf::new(
         member_id("k"),
@@ -559,9 +525,7 @@ fn member_leaf_nfc_normalization() {
         member_key("k"),
         "\u{00E9}",
         "X",
-        [1; 32],
-        vec![device_key("d")],
-    )
+        vec![device_key("d")])
     .unwrap();
     assert_eq!(m1.name(), m2.name());
 }
@@ -575,9 +539,7 @@ fn member_leaf_too_many_devices() {
         member_key("k"),
         "Alice",
         "Smith",
-        [0; 32],
-        devices,
-    );
+        devices);
     assert_eq!(err.unwrap_err(), OrgMembersError::DeviceSlotsFull);
 }
 
@@ -589,9 +551,7 @@ fn member_leaf_empty_devices() {
         member_key("k"),
         "Alice",
         "Smith",
-        [0; 32],
-        vec![],
-    );
+        vec![]);
     assert_eq!(err.unwrap_err(), OrgMembersError::EmptyDeviceList);
 }
 
@@ -609,7 +569,7 @@ fn member_leaf_has_id_handle_and_key() {
     let leaf = alice();
     assert_eq!(leaf.id(), &member_id("alice-id"));
     assert_eq!(leaf.handle(), "alice");
-    assert_eq!(leaf.key(), &member_key("alice-mk"));
+    assert_eq!(leaf.p2p_key(), &member_key("alice-mk"));
 }
 
 // --- Deterministic root hash ---
@@ -657,7 +617,7 @@ fn batch_mutations_then_recalculate() {
 fn jan_jan_has_two_devices() {
     let trie = TestTrie::genesis(vec![jan_jan()]).unwrap();
     let member = trie.get_by_handle("jan-jan").unwrap();
-    assert_eq!(member.device_count(), 2);
+    assert_eq!(member.p2p_device_count(), 2);
     assert_eq!(member.name(), "Jan-Jan");
     assert_eq!(member.surname(), "Gödel");
 }
@@ -773,16 +733,14 @@ fn member_key_rotation_through_delta() {
     let trie_b = TestTrie::genesis(starting_members).unwrap();
     assert_eq!(trie_a.root_hash().unwrap(), trie_b.root_hash().unwrap());
 
-    // Peer A rotates alice's MemberKey (handle and id unchanged).
+    // Peer A rotates alice's P2pMemberKey (handle and id unchanged).
     let rotated_alice = MemberLeaf::new(
         member_id("alice-id"),
         "alice",
         member_key("alice-rotated"),
         "Alice",
         "Smith",
-        [1; 32],
-        vec![device_key("alice-d1")],
-    )
+        vec![device_key("alice-d1")])
     .unwrap();
     let trie_a = trie_a.update(rotated_alice.clone()).unwrap();
     let (trie_a, delta) = trie_a.recalculate().unwrap();
@@ -794,8 +752,8 @@ fn member_key_rotation_through_delta() {
     // Both peers see the new key.
     let on_a = trie_a.get(&member_id("alice-id")).unwrap();
     let on_b = trie_b.get(&member_id("alice-id")).unwrap();
-    assert_eq!(on_a.key(), &member_key("alice-rotated"));
-    assert_eq!(on_b.key(), &member_key("alice-rotated"));
+    assert_eq!(on_a.p2p_key(), &member_key("alice-rotated"));
+    assert_eq!(on_b.p2p_key(), &member_key("alice-rotated"));
     assert_eq!(trie_a.root_hash().unwrap(), trie_b.root_hash().unwrap());
 }
 
@@ -832,9 +790,7 @@ fn apply_delta_rejects_confusable_in_upsert() {
         member_key("k1"),
         "A",
         "B",
-        [0; 32],
-        vec![device_key("d1")],
-    )
+        vec![device_key("d1")])
     .unwrap();
     let trie = TestTrie::genesis(vec![m1]).unwrap();
 
@@ -850,9 +806,7 @@ fn apply_delta_rejects_confusable_in_upsert() {
             member_key("k2"),
             "A",
             "B",
-            [0; 32],
-            vec![device_key("d2")],
-        )
+            vec![device_key("d2")])
         .unwrap(),
     );
 
@@ -868,8 +822,8 @@ fn orgtrie_is_send_sync() {
     assert_send_sync::<OrgTrie<Blake3Hasher>>();
     assert_send_sync::<MemberLeaf>();
     assert_send_sync::<MemberId>();
-    assert_send_sync::<MemberKey>();
-    assert_send_sync::<DeviceKey>();
+    assert_send_sync::<P2pMemberKey>();
+    assert_send_sync::<P2pDeviceKey>();
 }
 
 // --- Serde validation (C-1) ---
@@ -890,31 +844,26 @@ fn deserialize_rejects_invalid_handle() {
     struct EvilLeaf<'a> {
         id: MemberId,
         handle: &'a str,
-        key: MemberKey,
+        p2p_key: P2pMemberKey,
         name: &'a str,
         surname: &'a str,
-        group_pk: [u8; 32],
-        devices: org_members::types::DeviceSlots,
+        p2p_devices: org_members::types::P2pDeviceSlots,
     }
 
-    let devices = {
+    let p2p_devices = {
         let leaf = alice();
-        // Borrow the inner DeviceSlots via serde roundtrip.
         let dev_bytes = to_allocvec(&leaf).unwrap();
         let leaf2: MemberLeaf = from_bytes(&dev_bytes).unwrap();
-        // Reconstruct DeviceSlots from leaf2.devices() by going through the
-        // public new() — this is just a way to grab a valid DeviceSlots instance.
-        org_members::types::DeviceSlots::new(leaf2.devices().to_vec()).unwrap()
+        org_members::types::P2pDeviceSlots::new(leaf2.p2p_devices().to_vec()).unwrap()
     };
 
     let evil = EvilLeaf {
         id: *valid.id(),
         handle: "Alice",  // Uppercase -- should be rejected on deserialize.
-        key: *valid.key(),
+        p2p_key: *valid.p2p_key(),
         name: "A",
         surname: "B",
-        group_pk: *valid.group_pk(),
-        devices,
+        p2p_devices,
     };
     let evil_bytes = to_allocvec(&evil).unwrap();
     let result: Result<MemberLeaf, _> = from_bytes(&evil_bytes);
@@ -928,8 +877,8 @@ fn deserialize_rejects_invalid_handle() {
 #[test]
 fn deserialize_rejects_empty_device_list() {
     use postcard::{from_bytes, to_allocvec};
-    let empty_devices: Vec<DeviceKey> = vec![];
+    let empty_devices: Vec<P2pDeviceKey> = vec![];
     let bytes = to_allocvec(&empty_devices).unwrap();
-    let result: Result<org_members::types::DeviceSlots, _> = from_bytes(&bytes);
+    let result: Result<org_members::types::P2pDeviceSlots, _> = from_bytes(&bytes);
     assert!(result.is_err(), "deserialize must reject empty device list");
 }

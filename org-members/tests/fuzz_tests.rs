@@ -1,7 +1,7 @@
 use ed25519_dalek::SigningKey;
 use org_members::hasher::Blake3Hasher;
 use org_members::trie::OrgTrie;
-use org_members::types::{validate_handle, DeviceKey, MemberId, MemberKey, MemberLeaf};
+use org_members::types::{validate_handle, P2pDeviceKey, MemberId, P2pMemberKey, MemberLeaf};
 use proptest::prelude::*;
 
 type TestTrie = OrgTrie<Blake3Hasher>;
@@ -20,25 +20,25 @@ fn member_id(seed: &str) -> MemberId {
     MemberId::new(hash)
 }
 
-fn member_key(seed: &str) -> MemberKey {
+fn member_key(seed: &str) -> P2pMemberKey {
     let mut bytes = [0u8; 32];
     let hash: [u8; 32] = blake3::hash(seed.as_bytes()).into();
     bytes.copy_from_slice(&hash);
-    MemberKey::new(SigningKey::from_bytes(&bytes).verifying_key())
+    P2pMemberKey::new(SigningKey::from_bytes(&bytes).verifying_key())
 }
 
-fn device_key(seed: &str) -> DeviceKey {
+fn device_key(seed: &str) -> P2pDeviceKey {
     let mut bytes = [0u8; 32];
     let hash: [u8; 32] = blake3::hash(seed.as_bytes()).into();
     bytes.copy_from_slice(&hash);
-    DeviceKey::new(SigningKey::from_bytes(&bytes).verifying_key())
+    P2pDeviceKey::new(SigningKey::from_bytes(&bytes).verifying_key())
 }
 
 fn make_member(handle: &str, variant: u8) -> Option<MemberLeaf> {
     let id = member_id(&format!("{}-id-{}", handle, variant));
     let mk = member_key(&format!("{}-mk-{}", handle, variant));
     let dk = device_key(&format!("{}-d-{}", handle, variant));
-    MemberLeaf::new(id, handle, mk, "Test", "User", [variant; 32], vec![dk]).ok()
+    MemberLeaf::new(id, handle, mk, "Test", "User", vec![dk]).ok()
 }
 
 // ============================================================
@@ -107,7 +107,7 @@ proptest! {
                     let id = member_id(&format!("{}-id-0", handle));
                     let mk = member_key(&format!("{}-mk-{}", handle, *variant));
                     let dk = device_key(&format!("{}-d-{}", handle, *variant));
-                    if let Ok(m) = MemberLeaf::new(id, handle, mk, "T", "U", [*variant; 32], vec![dk]) {
+                    if let Ok(m) = MemberLeaf::new(id, handle, mk, "T", "U", vec![dk]) {
                         if let Ok(new_trie) = trie.update(m) {
                             trie = new_trie;
                         }
@@ -122,7 +122,7 @@ proptest! {
                     let mk = member_key(&format!("{}-mk-0", HANDLES[*id_idx]));
                     let dk = device_key(&format!("{}-d-0", HANDLES[*id_idx]));
                     if let Ok(m) =
-                        MemberLeaf::new(id, new_handle, mk, "T", "U", [0; 32], vec![dk])
+                        MemberLeaf::new(id, new_handle, mk, "T", "U", vec![dk])
                     {
                         if let Ok(new_trie) = trie.update(m) {
                             trie = new_trie;
