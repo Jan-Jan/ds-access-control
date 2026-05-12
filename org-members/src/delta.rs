@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::error::OrgMembersError;
@@ -5,14 +6,14 @@ use crate::hasher::TrieHasher;
 use crate::node::Node;
 use crate::smt::DefaultHashes;
 use crate::trie::OrgTrie;
-use crate::types::{Handle, MemberLeaf, RootHash};
+use crate::types::{MemberLeaf, RootHash};
 
 /// A set of changes anchored to a specific base trie root.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Delta {
     pub(crate) base_root: RootHash,
-    pub(crate) removed: Vec<Handle>,
+    pub(crate) removed: Vec<[u8; 32]>,
     pub(crate) upserted: Vec<MemberLeaf>,
 }
 
@@ -21,7 +22,8 @@ impl Delta {
         &self.base_root
     }
 
-    pub fn removed(&self) -> &[Handle] {
+    /// Member ids that were removed.
+    pub fn removed(&self) -> &[[u8; 32]] {
         &self.removed
     }
 
@@ -35,26 +37,21 @@ impl Delta {
 }
 
 /// Result of `apply_delta()`. Cannot query members -- can only verify or drop.
-///
-/// This compile-time guarantee prevents using unverified trie state.
 pub struct CandidateTrie<H: TrieHasher> {
     pub(crate) root: Arc<Node>,
     pub(crate) defaults: Arc<DefaultHashes>,
     pub(crate) member_count: usize,
     pub(crate) root_hash: RootHash,
     pub(crate) last_calculated_root: Option<Arc<Node>>,
+    pub(crate) skeleton_index: HashMap<String, String>,
     pub(crate) _hasher: core::marker::PhantomData<H>,
 }
 
 impl<H: TrieHasher> CandidateTrie<H> {
-    /// The root hash of the candidate trie (for logging/comparison before verifying).
     pub fn root_hash(&self) -> RootHash {
         self.root_hash
     }
 
-    /// Verifies root hash matches expected value (e.g., from on-chain).
-    /// On success, consumes self and returns verified OrgTrie.
-    /// On failure, consumes self and returns error.
     pub fn verify_against(self, expected_root: &RootHash) -> Result<OrgTrie<H>, OrgMembersError> {
         if self.root_hash != *expected_root {
             return Err(OrgMembersError::VerificationFailed);
@@ -66,6 +63,7 @@ impl<H: TrieHasher> CandidateTrie<H> {
             self.member_count,
             self.root_hash,
             self.last_calculated_root,
+            self.skeleton_index,
         ))
     }
 }

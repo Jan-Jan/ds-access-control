@@ -3,11 +3,17 @@ pub enum OrgMembersError {
     #[error("duplicate handle")]
     DuplicateHandle,
 
-    #[error("handle not found")]
-    HandleNotFound,
+    #[error("duplicate id")]
+    DuplicateId,
 
-    #[error("reserved handle")]
-    ReservedHandle,
+    #[error("id not found")]
+    IdNotFound,
+
+    #[error("invalid handle: {0}")]
+    InvalidHandle(String),
+
+    #[error("confusable handle")]
+    ConfusableHandle,
 
     #[error("duplicate device")]
     DuplicateDevice,

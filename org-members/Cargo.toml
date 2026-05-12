@@ -18,8 +18,10 @@ serde = { version = "1", default-features = false, features = ["derive"], option
 postcard = { version = "1", default-features = false, features = ["alloc"], optional = true }
 thiserror = { version = "2", default-features = false }
 unicode-normalization = "0.1"
+unicode-security = "0.1"
 blake3 = { version = "1", default-features = false }
 
 [dev-dependencies]
 postcard = { version = "1", features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }
+proptest = "1"
