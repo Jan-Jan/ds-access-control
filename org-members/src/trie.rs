@@ -474,7 +474,7 @@ impl<H: TrieHasher> OrgTrie<H> {
     }
 
     /// Computes the delta that transforms `old` into `self`.
-    pub fn diff_from(&self, old: &OrgTrie<H>) -> Result<Delta, OrgMembersError> {
+    pub fn calculate_delta(&self, old: &OrgTrie<H>) -> Result<Delta, OrgMembersError> {
         if !self.is_calculated() || !old.is_calculated() {
             return Err(OrgMembersError::HashesNotCalculated);
         }

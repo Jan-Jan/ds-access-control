@@ -225,7 +225,7 @@ proptest! {
 
 proptest! {
     #[test]
-    fn diff_roundtrip(
+    fn calculate_delta_roundtrip(
         initial_indices in proptest::collection::vec(arb_handle_idx(), 0..6),
         ops in proptest::collection::vec(arb_delta_op(), 1..10),
     ) {
@@ -266,7 +266,7 @@ proptest! {
             Err(_) => return Ok(()),
         };
 
-        let diff_delta = match trie_b.diff_from(&trie_a) {
+        let diff_delta = match trie_b.calculate_delta(&trie_a) {
             Ok(d) => d,
             Err(_) => return Ok(()),
         };

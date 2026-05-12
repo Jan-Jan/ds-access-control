@@ -543,22 +543,61 @@ fn candidate_verify_wrong_root_fails() {
     assert_eq!(err.unwrap_err(), OrgMembersError::VerificationFailed);
 }
 
-// --- Diff tests (long-offline catch-up) ---
+// --- calculate_delta tests (long-offline catch-up) ---
 
 #[test]
-fn diff_produces_valid_delta() {
+fn calculate_delta_then_apply_roundtrips() {
+    // Member alice's view (the "old" trie) diverged from the latest org state.
     let old_trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
 
+    // Meanwhile the canonical trie advanced.
     let current = old_trie.add_member(charlie()).unwrap();
     let current = current.delete_member(&member_id("alice-id")).unwrap();
     let (current, _) = current.recalculate().unwrap();
 
-    let catchup_delta = current.diff_from(&old_trie).unwrap();
+    // Computing the trie delta from old → current produces the change set
+    // needed to catch up. Applying it on the old trie yields the current root.
+    let catchup_delta = current.calculate_delta(&old_trie).unwrap();
 
     let candidate = old_trie.apply_delta(&catchup_delta).unwrap();
     let verified = candidate.verify_against(&current.root_hash().unwrap()).unwrap();
 
     assert_eq!(verified.root_hash().unwrap(), current.root_hash().unwrap());
+}
+
+#[test]
+fn calculate_delta_returns_removed_and_upserted_leaves() {
+    let old_trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    let new_trie = old_trie.add_member(charlie()).unwrap();
+    let new_trie = new_trie.delete_member(&member_id("bob-id")).unwrap();
+    let (new_trie, _) = new_trie.recalculate().unwrap();
+
+    let delta = new_trie.calculate_delta(&old_trie).unwrap();
+
+    assert_eq!(delta.base_root(), &old_trie.root_hash().unwrap());
+    assert_eq!(delta.removed().len(), 1);
+    assert_eq!(delta.removed()[0], member_id("bob-id"));
+    assert_eq!(delta.upserted().len(), 1);
+    assert_eq!(delta.upserted()[0].id(), &member_id("charlie-id"));
+}
+
+#[test]
+fn calculate_delta_empty_when_tries_identical() {
+    let trie_a = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    let trie_b = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    assert_eq!(trie_a.root_hash().unwrap(), trie_b.root_hash().unwrap());
+
+    let delta = trie_a.calculate_delta(&trie_b).unwrap();
+    assert!(delta.is_empty());
+    assert_eq!(delta.base_root(), &trie_b.root_hash().unwrap());
+}
+
+#[test]
+fn calculate_delta_fails_when_hashes_not_calculated() {
+    let trie_a = TestTrie::genesis(vec![alice()]).unwrap();
+    let trie_b = trie_a.add_member(bob()).unwrap(); // pending mutations, not recalculated
+    let err = trie_b.calculate_delta(&trie_a);
+    assert_eq!(err.unwrap_err(), OrgMembersError::HashesNotCalculated);
 }
 
 // --- Members iteration ---
