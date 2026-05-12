@@ -11,6 +11,7 @@ use crate::error::OrgMembersError;
 use crate::hasher::TrieHasher;
 use crate::node::Node;
 use crate::smt::{self, DefaultHashes};
+use crate::normalize::to_nfc;
 use crate::types::{handle_skeleton, MemberId, MemberLeaf, RootHash};
 
 /// An immutable binary Sparse Merkle Tree for organisation membership.
@@ -112,7 +113,9 @@ impl<H: TrieHasher> OrgTrie<H> {
     }
 
     pub fn contains_handle(&self, handle: &str) -> bool {
-        self.handle_index.contains_key(handle)
+        // NFC-normalize input so callers passing decomposed Unicode still match.
+        let normalized = to_nfc(handle);
+        self.handle_index.contains_key(normalized.as_str())
     }
 
     pub fn get(&self, id: &MemberId) -> Option<MemberLeaf> {
@@ -120,7 +123,8 @@ impl<H: TrieHasher> OrgTrie<H> {
     }
 
     pub fn get_by_handle(&self, handle: &str) -> Option<MemberLeaf> {
-        let id = self.handle_index.get(handle)?;
+        let normalized = to_nfc(handle);
+        let id = self.handle_index.get(normalized.as_str())?;
         smt::get_member(&self.root, id)
     }
 
@@ -239,21 +243,26 @@ impl<H: TrieHasher> OrgTrie<H> {
     /// to commit a new root hash via `recalculate()`.
     ///
     /// Returns an empty delta if no changes are pending.
-    pub fn pending_changes(&self) -> Delta {
+    /// Returns `Err(InvariantViolated)` if the internal `last_calculated_root`
+    /// invariant is broken (its hash should always be populated when present).
+    pub fn pending_changes(&self) -> Result<Delta, OrgMembersError> {
         if let Some(ref old_root) = self.last_calculated_root {
             let (removed, upserted) = smt::diff_tries(old_root, &self.root);
-            Delta {
-                base_root: RootHash(*old_root.hash().unwrap_or(&[0u8; 32])),
+            // Invariant: last_calculated_root is only ever set immediately
+            // after recalculate_hashes has populated its Once cell.
+            let base_root_bytes = old_root.hash().ok_or(OrgMembersError::InvariantViolated)?;
+            Ok(Delta {
+                base_root: RootHash(*base_root_bytes),
                 removed,
                 upserted,
-            }
+            })
         } else {
             let members = smt::collect_members(&self.root);
-            Delta {
+            Ok(Delta {
                 base_root: RootHash(*self.defaults.at_level(crate::smt::SMT_DEPTH)),
                 removed: Vec::new(),
                 upserted: members,
-            }
+            })
         }
     }
 
@@ -265,7 +274,7 @@ impl<H: TrieHasher> OrgTrie<H> {
     /// Walks the trie bottom-up, filling every empty OnceLock hash.
     /// Returns the trie (now fully hashed) and a delta of all pending changes.
     pub fn recalculate(&self) -> Result<(Self, Delta), OrgMembersError> {
-        let delta = self.pending_changes();
+        let delta = self.pending_changes()?;
         let root_hash = smt::recalculate_hashes::<H>(&self.root)?;
 
         Ok((
@@ -354,7 +363,6 @@ impl<H: TrieHasher> OrgTrie<H> {
             defaults: self.defaults.clone(),
             member_count: count,
             root_hash: RootHash(root_hash),
-            last_calculated_root: self.last_calculated_root.clone(),
             skeleton_index: new_skeleton_index,
             handle_index: new_handle_index,
             _hasher: core::marker::PhantomData,
@@ -381,7 +389,6 @@ impl<H: TrieHasher> OrgTrie<H> {
         defaults: Arc<DefaultHashes>,
         member_count: usize,
         root_hash: RootHash,
-        _last_calculated_root: Option<Arc<Node>>,
         skeleton_index: HashMap<String, String>,
         handle_index: HashMap<String, MemberId>,
     ) -> Self {

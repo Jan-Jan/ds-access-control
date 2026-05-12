@@ -69,6 +69,9 @@ proptest! {
 enum Op {
     Insert(usize),
     Update(usize, u8),
+    /// Update member at `id_idx`, retargeting their handle to `handle_idx`'s handle.
+    /// Stress-tests the handle-collision-during-update path.
+    UpdateRehandle(usize, usize),
     Delete(usize),
     Recalculate,
 }
@@ -77,6 +80,7 @@ fn arb_op() -> impl Strategy<Value = Op> {
     prop_oneof![
         arb_handle_idx().prop_map(Op::Insert),
         (arb_handle_idx(), any::<u8>()).prop_map(|(idx, v)| Op::Update(idx, v)),
+        (arb_handle_idx(), arb_handle_idx()).prop_map(|(a, b)| Op::UpdateRehandle(a, b)),
         arb_handle_idx().prop_map(Op::Delete),
         Just(Op::Recalculate),
     ]
@@ -104,6 +108,22 @@ proptest! {
                     let mk = member_key(&format!("{}-mk-{}", handle, *variant));
                     let dk = device_key(&format!("{}-d-{}", handle, *variant));
                     if let Ok(m) = MemberLeaf::new(id, handle, mk, "T", "U", [*variant; 32], vec![dk]) {
+                        if let Ok(new_trie) = trie.update(m) {
+                            trie = new_trie;
+                        }
+                    }
+                }
+                Op::UpdateRehandle(id_idx, handle_idx) => {
+                    // Update the member at id_idx, retargeting to handle_idx's handle.
+                    // If handle_idx's handle is already taken by another member, this
+                    // should fail with DuplicateHandle (must not panic or corrupt).
+                    let id = member_id(&format!("{}-id-0", HANDLES[*id_idx]));
+                    let new_handle = HANDLES[*handle_idx];
+                    let mk = member_key(&format!("{}-mk-0", HANDLES[*id_idx]));
+                    let dk = device_key(&format!("{}-d-0", HANDLES[*id_idx]));
+                    if let Ok(m) =
+                        MemberLeaf::new(id, new_handle, mk, "T", "U", [0; 32], vec![dk])
+                    {
                         if let Ok(new_trie) = trie.update(m) {
                             trie = new_trie;
                         }

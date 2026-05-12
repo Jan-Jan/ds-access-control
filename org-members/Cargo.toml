@@ -19,7 +19,10 @@ unicode-normalization = { version = "0.1", default-features = false }
 unicode-security = { version = "0.1", default-features = false }
 blake3 = { version = "1", default-features = false }
 ed25519-dalek = { version = "2", default-features = false, features = ["alloc"] }
+# hashbrown: HashMap that works in no_std + alloc. The `default-hasher` feature
+# enables `foldhash` (no_std-compatible, NOT `ahash` which requires std).
 hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
+# spin::Once: no_std-friendly lazy hash slot for Node. Thread-safe via spinlock.
 spin = { version = "0.9", default-features = false, features = ["once"] }
 
 [dev-dependencies]

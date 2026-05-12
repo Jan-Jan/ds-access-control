@@ -423,9 +423,16 @@ fn handle_digits_allowed() {
 
 #[test]
 fn genesis_rejects_confusables() {
+    // Find two handles whose UTS#39 skeletons match by probing candidates at runtime.
+    // We can't hard-code a confusable pair safely because the skeleton table is
+    // a library-controlled mapping that could shift. The test would silently pass
+    // if our pair stopped being confusable. Probe instead, then assert rejection.
+    let (h1, h2) = find_confusable_pair()
+        .expect("test setup: no confusable pair found among candidates");
+
     let m1 = MemberLeaf::new(
         member_id("k1"),
-        "paypal",
+        &h1,
         member_key("k1"),
         "A",
         "B",
@@ -435,7 +442,7 @@ fn genesis_rejects_confusables() {
     .unwrap();
     let m2 = MemberLeaf::new(
         member_id("k2"),
-        "paypa1",
+        &h2,
         member_key("k2"),
         "A",
         "B",
@@ -443,10 +450,93 @@ fn genesis_rejects_confusables() {
         vec![device_key("d2")],
     )
     .unwrap();
-    let result = TestTrie::genesis(vec![m1, m2]);
-    if let Err(e) = result {
-        assert!(matches!(e, OrgMembersError::ConfusableHandle));
+    let err = TestTrie::genesis(vec![m1, m2]).unwrap_err();
+    assert_eq!(err, OrgMembersError::ConfusableHandle);
+}
+
+#[test]
+fn insert_rejects_confusable_handle() {
+    let (h1, h2) =
+        find_confusable_pair().expect("test setup: no confusable pair found among candidates");
+    let m1 = MemberLeaf::new(
+        member_id("k1"),
+        &h1,
+        member_key("k1"),
+        "A",
+        "B",
+        [0; 32],
+        vec![device_key("d1")],
+    )
+    .unwrap();
+    let m2 = MemberLeaf::new(
+        member_id("k2"),
+        &h2,
+        member_key("k2"),
+        "A",
+        "B",
+        [0; 32],
+        vec![device_key("d2")],
+    )
+    .unwrap();
+
+    let trie = TestTrie::genesis(vec![m1]).unwrap();
+    let err = trie.insert(m2).unwrap_err();
+    assert_eq!(err, OrgMembersError::ConfusableHandle);
+}
+
+#[test]
+fn update_rejects_confusable_handle() {
+    let (h1, h2) =
+        find_confusable_pair().expect("test setup: no confusable pair found among candidates");
+    // Two members, neither confusable initially.
+    let m1 = MemberLeaf::new(
+        member_id("k1"),
+        &h1,
+        member_key("k1"),
+        "A",
+        "B",
+        [0; 32],
+        vec![device_key("d1")],
+    )
+    .unwrap();
+    let m2 = alice();
+
+    let trie = TestTrie::genesis(vec![m1, m2]).unwrap();
+
+    // Now try to update alice's handle to a confusable of h1.
+    let renamed = MemberLeaf::new(
+        member_id("alice-id"),
+        &h2,
+        member_key("alice-mk"),
+        "Alice",
+        "Smith",
+        [1; 32],
+        vec![device_key("alice-d1")],
+    )
+    .unwrap();
+    let err = trie.update(renamed).unwrap_err();
+    assert_eq!(err, OrgMembersError::ConfusableHandle);
+}
+
+/// Searches a small pool of candidate handles for a pair with matching UTS#39
+/// skeletons, suitable for confusable-detection tests. Returns None if no
+/// pair was found (in which case the test will skip / signal a setup issue).
+fn find_confusable_pair() -> Option<(String, String)> {
+    use org_members::types::handle_skeleton;
+    // Candidates passing handle validation (lowercase, no '.', valid identifier chars).
+    let candidates = [
+        "paypal", "paypa1", "h0use", "house", "g00gle", "google", "ab1", "abl", "amaz0n", "amazon",
+        "g0t", "got", "0lice", "olice", "01ice", "alice",
+    ];
+    for (i, &a) in candidates.iter().enumerate() {
+        let sk_a = handle_skeleton(a);
+        for &b in &candidates[i + 1..] {
+            if a != b && sk_a == handle_skeleton(b) {
+                return Some((a.to_string(), b.to_string()));
+            }
+        }
     }
+    None
 }
 
 // --- MemberLeaf tests ---
@@ -613,7 +703,7 @@ fn contains_handle() {
 #[test]
 fn pending_changes_empty_when_no_mutations() {
     let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
-    let pending = trie.pending_changes();
+    let pending = trie.pending_changes().unwrap();
     assert!(pending.is_empty());
     assert!(!trie.has_pending_changes());
 }
@@ -627,7 +717,7 @@ fn pending_changes_reflects_mutations() {
 
     assert!(trie.has_pending_changes());
 
-    let pending = trie.pending_changes();
+    let pending = trie.pending_changes().unwrap();
     assert_eq!(pending.removed().len(), 1);
     assert_eq!(pending.upserted().len(), 2);
     assert_eq!(
@@ -641,8 +731,8 @@ fn pending_changes_idempotent() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
     let trie = trie.insert(bob()).unwrap();
 
-    let pending1 = trie.pending_changes();
-    let pending2 = trie.pending_changes();
+    let pending1 = trie.pending_changes().unwrap();
+    let pending2 = trie.pending_changes().unwrap();
     assert_eq!(pending1.upserted().len(), pending2.upserted().len());
     assert_eq!(pending1.removed().len(), pending2.removed().len());
 
@@ -655,7 +745,7 @@ fn pending_changes_matches_recalculate_delta() {
     let trie = trie.insert(charlie()).unwrap();
     let trie = trie.delete(&member_id("alice-id")).unwrap();
 
-    let preview = trie.pending_changes();
+    let preview = trie.pending_changes().unwrap();
     let (_, committed) = trie.recalculate().unwrap();
 
     assert_eq!(preview.removed().len(), committed.removed().len());
@@ -670,5 +760,176 @@ fn pending_changes_after_recalculate_is_empty() {
     let (trie, _) = trie.recalculate().unwrap();
 
     assert!(!trie.has_pending_changes());
-    assert!(trie.pending_changes().is_empty());
+    assert!(trie.pending_changes().unwrap().is_empty());
+}
+
+// --- Key rotation through delta (I-1) ---
+
+#[test]
+fn member_key_rotation_through_delta() {
+    // Peer A and Peer B start with the same trie.
+    let starting_members = vec![alice(), bob()];
+    let trie_a = TestTrie::genesis(starting_members.clone()).unwrap();
+    let trie_b = TestTrie::genesis(starting_members).unwrap();
+    assert_eq!(trie_a.root_hash().unwrap(), trie_b.root_hash().unwrap());
+
+    // Peer A rotates alice's MemberKey (handle and id unchanged).
+    let rotated_alice = MemberLeaf::new(
+        member_id("alice-id"),
+        "alice",
+        member_key("alice-rotated"),
+        "Alice",
+        "Smith",
+        [1; 32],
+        vec![device_key("alice-d1")],
+    )
+    .unwrap();
+    let trie_a = trie_a.update(rotated_alice.clone()).unwrap();
+    let (trie_a, delta) = trie_a.recalculate().unwrap();
+
+    // Peer B applies the delta and verifies.
+    let candidate = trie_b.apply_delta(&delta).unwrap();
+    let trie_b = candidate.verify_against(&trie_a.root_hash().unwrap()).unwrap();
+
+    // Both peers see the new key.
+    let on_a = trie_a.get(&member_id("alice-id")).unwrap();
+    let on_b = trie_b.get(&member_id("alice-id")).unwrap();
+    assert_eq!(on_a.key(), &member_key("alice-rotated"));
+    assert_eq!(on_b.key(), &member_key("alice-rotated"));
+    assert_eq!(trie_a.root_hash().unwrap(), trie_b.root_hash().unwrap());
+}
+
+// --- Adversarial apply_delta (I-2) ---
+
+#[test]
+fn apply_delta_ignores_stale_removal() {
+    let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+
+    // Construct a delta that removes a member who doesn't exist.
+    let ghost_id = member_id("ghost-id");
+    let crafted = trie.delete(&member_id("alice-id")).unwrap();
+    let (target, mut delta) = crafted.recalculate().unwrap();
+
+    // Inject a stale removal of ghost-id into the delta.
+    delta.removed_mut_for_test().push(ghost_id);
+
+    // apply_delta must not underflow member_count, and the resulting candidate
+    // must verify against the target trie (which doesn't include ghost-id).
+    let candidate = trie.apply_delta(&delta).unwrap();
+    let result = candidate.verify_against(&target.root_hash().unwrap()).unwrap();
+    assert_eq!(result.member_count(), target.member_count());
+}
+
+#[test]
+fn apply_delta_rejects_confusable_in_upsert() {
+    let (h1, h2) =
+        find_confusable_pair().expect("test setup: no confusable pair found among candidates");
+
+    // Receiver trie holds a member with handle h1.
+    let m1 = MemberLeaf::new(
+        member_id("k1"),
+        &h1,
+        member_key("k1"),
+        "A",
+        "B",
+        [0; 32],
+        vec![device_key("d1")],
+    )
+    .unwrap();
+    let trie = TestTrie::genesis(vec![m1]).unwrap();
+
+    // Craft an adversarial delta whose base matches `trie` but adds a confusable.
+    // Start from a real delta to get the right base_root, then swap the upserts.
+    let (_, mut delta) = trie.insert(bob()).unwrap().recalculate().unwrap();
+    delta.removed_mut_for_test().clear();
+    delta.upserted_mut_for_test().clear();
+    delta.upserted_mut_for_test().push(
+        MemberLeaf::new(
+            member_id("k2"),
+            &h2,
+            member_key("k2"),
+            "A",
+            "B",
+            [0; 32],
+            vec![device_key("d2")],
+        )
+        .unwrap(),
+    );
+
+    let err = trie.apply_delta(&delta).unwrap_err();
+    assert_eq!(err, OrgMembersError::ConfusableHandle);
+}
+
+// --- Send + Sync (recommendation 4) ---
+
+#[test]
+fn orgtrie_is_send_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<OrgTrie<Blake3Hasher>>();
+    assert_send_sync::<MemberLeaf>();
+    assert_send_sync::<MemberId>();
+    assert_send_sync::<MemberKey>();
+    assert_send_sync::<DeviceKey>();
+}
+
+// --- Serde validation (C-1) ---
+
+#[cfg(feature = "serde")]
+#[test]
+fn deserialize_rejects_invalid_handle() {
+    use postcard::{from_bytes, to_allocvec};
+    let valid = alice();
+    let bytes = to_allocvec(&valid).unwrap();
+
+    // Round-trip the valid case to confirm baseline.
+    let _: MemberLeaf = from_bytes(&bytes).unwrap();
+
+    // Build a wire payload with an uppercase handle directly via the same
+    // serde shape, bypassing MemberLeaf::new.
+    #[derive(serde::Serialize)]
+    struct EvilLeaf<'a> {
+        id: MemberId,
+        handle: &'a str,
+        key: MemberKey,
+        name: &'a str,
+        surname: &'a str,
+        group_pk: [u8; 32],
+        devices: org_members::types::DeviceSlots,
+    }
+
+    let devices = {
+        let leaf = alice();
+        // Borrow the inner DeviceSlots via serde roundtrip.
+        let dev_bytes = to_allocvec(&leaf).unwrap();
+        let leaf2: MemberLeaf = from_bytes(&dev_bytes).unwrap();
+        // Reconstruct DeviceSlots from leaf2.devices() by going through the
+        // public new() — this is just a way to grab a valid DeviceSlots instance.
+        org_members::types::DeviceSlots::new(leaf2.devices().to_vec()).unwrap()
+    };
+
+    let evil = EvilLeaf {
+        id: *valid.id(),
+        handle: "Alice",  // Uppercase -- should be rejected on deserialize.
+        key: *valid.key(),
+        name: "A",
+        surname: "B",
+        group_pk: *valid.group_pk(),
+        devices,
+    };
+    let evil_bytes = to_allocvec(&evil).unwrap();
+    let result: Result<MemberLeaf, _> = from_bytes(&evil_bytes);
+    assert!(
+        result.is_err(),
+        "deserialize must reject MemberLeaf with uppercase handle"
+    );
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn deserialize_rejects_empty_device_list() {
+    use postcard::{from_bytes, to_allocvec};
+    let empty_devices: Vec<DeviceKey> = vec![];
+    let bytes = to_allocvec(&empty_devices).unwrap();
+    let result: Result<org_members::types::DeviceSlots, _> = from_bytes(&bytes);
+    assert!(result.is_err(), "deserialize must reject empty device list");
 }

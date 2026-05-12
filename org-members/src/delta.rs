@@ -38,6 +38,19 @@ impl Delta {
     pub fn is_empty(&self) -> bool {
         self.removed.is_empty() && self.upserted.is_empty()
     }
+
+    /// Test-only mutator for the `removed` list. Used to construct adversarial
+    /// deltas (e.g., stale or duplicate removals) for security testing.
+    #[doc(hidden)]
+    pub fn removed_mut_for_test(&mut self) -> &mut Vec<MemberId> {
+        &mut self.removed
+    }
+
+    /// Test-only mutator for the `upserted` list.
+    #[doc(hidden)]
+    pub fn upserted_mut_for_test(&mut self) -> &mut Vec<MemberLeaf> {
+        &mut self.upserted
+    }
 }
 
 /// Result of `apply_delta()`. Cannot query members -- can only verify or drop.
@@ -46,7 +59,6 @@ pub struct CandidateTrie<H: TrieHasher> {
     pub(crate) defaults: Arc<DefaultHashes>,
     pub(crate) member_count: usize,
     pub(crate) root_hash: RootHash,
-    pub(crate) last_calculated_root: Option<Arc<Node>>,
     pub(crate) skeleton_index: HashMap<String, String>,
     pub(crate) handle_index: HashMap<String, MemberId>,
     pub(crate) _hasher: core::marker::PhantomData<H>,
@@ -67,7 +79,6 @@ impl<H: TrieHasher> CandidateTrie<H> {
             self.defaults,
             self.member_count,
             self.root_hash,
-            self.last_calculated_root,
             self.skeleton_index,
             self.handle_index,
         ))

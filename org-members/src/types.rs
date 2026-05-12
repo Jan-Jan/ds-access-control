@@ -24,6 +24,13 @@ pub const MAX_DEVICES: usize = 4;
 pub struct MemberId(pub(crate) [u8; 32]);
 
 impl MemberId {
+    /// Wraps 32 opaque bytes as a member id.
+    ///
+    /// The library does NOT validate these bytes -- the caller is responsible
+    /// for ensuring ids are unique within the organisation and effectively
+    /// random (so the SMT tree stays well-distributed across the 256-bit
+    /// keyspace). Suggested generators: cryptographic random bytes, or a hash
+    /// of a stable per-member input (e.g. an enrollment artifact).
     pub fn new(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
@@ -240,9 +247,26 @@ impl fmt::Debug for RootHash {
 /// Device slots for a member. Fixed depth-2 sub-trie (max 4 devices).
 /// Devices are ed25519 public keys, stored sorted.
 #[derive(Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeviceSlots {
     slots: Vec<DeviceKey>,
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for DeviceSlots {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.slots.serialize(s)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for DeviceSlots {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let slots = Vec::<DeviceKey>::deserialize(d)?;
+        // Re-run constructor validation so an attacker-supplied wire format
+        // cannot bypass invariants (empty list, exceeds MAX_DEVICES, duplicates,
+        // unsorted). `DeviceSlots::new` sorts and checks all of these.
+        DeviceSlots::new(slots).map_err(serde::de::Error::custom)
+    }
 }
 
 impl DeviceSlots {
@@ -317,7 +341,6 @@ impl fmt::Debug for DeviceSlots {
 
 /// A single member leaf in the trie. All PII fields are redacted in Debug.
 #[derive(Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MemberLeaf {
     /// Immutable member id. Used as the SMT key.
     id: MemberId,
@@ -329,6 +352,58 @@ pub struct MemberLeaf {
     surname: String,
     group_pk: [u8; 32],
     devices: DeviceSlots,
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
+struct MemberLeafSerde {
+    id: MemberId,
+    handle: String,
+    key: MemberKey,
+    name: String,
+    surname: String,
+    group_pk: [u8; 32],
+    devices: DeviceSlots,
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for MemberLeaf {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        MemberLeafSerde {
+            id: self.id,
+            handle: self.handle.clone(),
+            key: self.key,
+            name: self.name.clone(),
+            surname: self.surname.clone(),
+            group_pk: self.group_pk,
+            devices: self.devices.clone(),
+        }
+        .serialize(s)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for MemberLeaf {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let raw = MemberLeafSerde::deserialize(d)?;
+        // Re-validate the handle so an attacker-supplied wire format cannot
+        // bypass NFC normalization, lowercase, single-script, no-`.`, or UTS#39
+        // restrictions. `validate_handle` also returns the NFC-normalized form,
+        // so the stored handle is canonical even if the wire payload wasn't.
+        let validated_handle = validate_handle(&raw.handle).map_err(serde::de::Error::custom)?;
+        // Normalize name and surname to NFC for hash determinism.
+        let name = to_nfc(&raw.name);
+        let surname = to_nfc(&raw.surname);
+        Ok(Self {
+            id: raw.id,
+            handle: validated_handle,
+            key: raw.key,
+            name,
+            surname,
+            group_pk: raw.group_pk,
+            devices: raw.devices,
+        })
+    }
 }
 
 impl MemberLeaf {
