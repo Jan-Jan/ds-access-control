@@ -3,10 +3,10 @@ pub enum OrgMembersError {
     #[error("duplicate handle")]
     DuplicateHandle,
 
-    #[error("duplicate id")]
+    #[error("duplicate member id")]
     DuplicateId,
 
-    #[error("id not found")]
+    #[error("member id not found")]
     IdNotFound,
 
     #[error("invalid handle: {0}")]

@@ -1,5 +1,6 @@
 use core::fmt;
 
+use ed25519_dalek::VerifyingKey;
 use unicode_normalization::UnicodeNormalization;
 use unicode_security::GeneralSecurityProfile;
 use unicode_security::MixedScript;
@@ -9,6 +10,148 @@ use crate::normalize::to_nfc;
 
 /// Maximum number of devices per member.
 pub const MAX_DEVICES: usize = 4;
+
+/// Immutable member identifier. Used as the SMT key and as a stable reference
+/// to a member regardless of changes to their handle or CGKA key.
+///
+/// The 32 bytes are opaque -- the caller is responsible for generating unique,
+/// immutable values (e.g., random bytes, or a hash of a stable input).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct MemberId(pub(crate) [u8; 32]);
+
+impl MemberId {
+    pub fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Returns the bit at the given index (0 = MSB of byte 0, 255 = LSB of byte 31).
+    /// Used for SMT path traversal.
+    pub fn bit(&self, index: u16) -> bool {
+        let byte_idx = (index / 8) as usize;
+        let bit_idx = 7 - (index % 8);
+        (self.0[byte_idx] >> bit_idx) & 1 == 1
+    }
+}
+
+impl fmt::Debug for MemberId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MemberId({:02x}{:02x}{:02x}{:02x}..)", self.0[0], self.0[1], self.0[2], self.0[3])
+    }
+}
+
+/// A member's ed25519 public key, used for CGKA (Continuous Group Key Agreement)
+/// by the local-first collaboration layer. Can change over time (e.g., upon
+/// device rotation or key compromise) -- distinct from the immutable `MemberId`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MemberKey(VerifyingKey);
+
+impl MemberKey {
+    pub fn new(key: VerifyingKey) -> Self {
+        Self(key)
+    }
+
+    pub fn verifying_key(&self) -> &VerifyingKey {
+        &self.0
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        self.0.as_bytes()
+    }
+}
+
+impl PartialOrd for MemberKey {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MemberKey {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.as_bytes().cmp(other.as_bytes())
+    }
+}
+
+impl fmt::Debug for MemberKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let b = self.as_bytes();
+        write!(f, "MemberKey({:02x}{:02x}{:02x}{:02x}..)", b[0], b[1], b[2], b[3])
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for MemberKey {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.as_bytes().serialize(s)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for MemberKey {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let bytes = <[u8; 32]>::deserialize(d)?;
+        let vk = VerifyingKey::from_bytes(&bytes).map_err(serde::de::Error::custom)?;
+        Ok(Self(vk))
+    }
+}
+
+/// A device's ed25519 public key. Serves as both the device's identity and
+/// signing key. (For devices, key and id are the same thing.)
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DeviceKey(VerifyingKey);
+
+impl DeviceKey {
+    pub fn new(key: VerifyingKey) -> Self {
+        Self(key)
+    }
+
+    pub fn verifying_key(&self) -> &VerifyingKey {
+        &self.0
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        self.0.as_bytes()
+    }
+}
+
+impl PartialOrd for DeviceKey {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for DeviceKey {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.as_bytes().cmp(other.as_bytes())
+    }
+}
+
+impl fmt::Debug for DeviceKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let b = self.as_bytes();
+        write!(f, "DeviceKey({:02x}{:02x}{:02x}{:02x}..)", b[0], b[1], b[2], b[3])
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for DeviceKey {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.as_bytes().serialize(s)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for DeviceKey {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let bytes = <[u8; 32]>::deserialize(d)?;
+        let vk = VerifyingKey::from_bytes(&bytes).map_err(serde::de::Error::custom)?;
+        Ok(Self(vk))
+    }
+}
 
 /// Validates a handle string and returns the NFC-normalized form.
 ///
@@ -59,25 +202,11 @@ pub fn validate_handle(handle: &str) -> Result<String, OrgMembersError> {
     Ok(normalized)
 }
 
-/// Derives a 32-byte member id from a validated handle string.
-pub fn derive_id(handle: &str) -> [u8; 32] {
-    blake3::hash(handle.as_bytes()).into()
-}
-
 /// Returns the UTS#39 skeleton form of a handle string.
 /// Used to detect confusable/homoglyph handles.
 pub fn handle_skeleton(handle: &str) -> String {
     use unicode_security::confusable_detection::skeleton;
     skeleton(handle).collect()
-}
-
-/// Returns the bit at the given index of a 32-byte key.
-/// (0 = MSB of byte 0, 255 = LSB of byte 31).
-/// Used for SMT path traversal.
-pub fn bit_at(key: &[u8; 32], index: u16) -> bool {
-    let byte_idx = (index / 8) as usize;
-    let bit_idx = 7 - (index % 8);
-    (key[byte_idx] >> bit_idx) & 1 == 1
 }
 
 /// Merkle root hash. 32-byte hash output.
@@ -110,11 +239,11 @@ impl fmt::Debug for RootHash {
 #[derive(Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeviceSlots {
-    slots: Vec<[u8; 32]>,
+    slots: Vec<DeviceKey>,
 }
 
 impl DeviceSlots {
-    pub fn new(mut devices: Vec<[u8; 32]>) -> Result<Self, OrgMembersError> {
+    pub fn new(mut devices: Vec<DeviceKey>) -> Result<Self, OrgMembersError> {
         if devices.is_empty() {
             return Err(OrgMembersError::EmptyDeviceList);
         }
@@ -130,35 +259,35 @@ impl DeviceSlots {
         Ok(Self { slots: devices })
     }
 
-    pub fn devices(&self) -> &[[u8; 32]] {
+    pub fn devices(&self) -> &[DeviceKey] {
         &self.slots
     }
 
-    pub fn has_device(&self, ed25519_pk: &[u8; 32]) -> bool {
-        self.slots.binary_search(ed25519_pk).is_ok()
+    pub fn has_device(&self, device: &DeviceKey) -> bool {
+        self.slots.binary_search(device).is_ok()
     }
 
     pub fn device_count(&self) -> usize {
         self.slots.len()
     }
 
-    pub fn add_device(&self, ed25519_pk: [u8; 32]) -> Result<Self, OrgMembersError> {
+    pub fn add_device(&self, device: DeviceKey) -> Result<Self, OrgMembersError> {
         if self.slots.len() >= MAX_DEVICES {
             return Err(OrgMembersError::DeviceSlotsFull);
         }
-        if self.has_device(&ed25519_pk) {
+        if self.has_device(&device) {
             return Err(OrgMembersError::DuplicateDevice);
         }
         let mut new_slots = self.slots.clone();
-        new_slots.push(ed25519_pk);
+        new_slots.push(device);
         new_slots.sort();
         Ok(Self { slots: new_slots })
     }
 
-    pub fn remove_device(&self, ed25519_pk: &[u8; 32]) -> Result<Self, OrgMembersError> {
+    pub fn remove_device(&self, device: &DeviceKey) -> Result<Self, OrgMembersError> {
         let idx = self
             .slots
-            .binary_search(ed25519_pk)
+            .binary_search(device)
             .map_err(|_| OrgMembersError::DeviceNotFound)?;
         let mut new_slots = self.slots.clone();
         new_slots.remove(idx);
@@ -168,7 +297,7 @@ impl DeviceSlots {
         Ok(Self { slots: new_slots })
     }
 
-    pub fn to_fixed_slots(&self) -> [Option<[u8; 32]>; MAX_DEVICES] {
+    pub fn to_fixed_slots(&self) -> [Option<DeviceKey>; MAX_DEVICES] {
         let mut fixed = [None; MAX_DEVICES];
         for (i, device) in self.slots.iter().enumerate() {
             fixed[i] = Some(*device);
@@ -187,10 +316,12 @@ impl fmt::Debug for DeviceSlots {
 #[derive(Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MemberLeaf {
-    /// Hash-derived identifier used as the SMT key.
-    id: [u8; 32],
-    /// Validated, NFC-normalized handle string (PII).
+    /// Immutable member id. Used as the SMT key.
+    id: MemberId,
+    /// Validated, NFC-normalized handle string (PII). Can change rarely.
     handle: String,
+    /// The member's CGKA key. Can change over time.
+    key: MemberKey,
     name: String,
     surname: String,
     group_pk: [u8; 32],
@@ -200,21 +331,23 @@ pub struct MemberLeaf {
 impl MemberLeaf {
     /// Constructs a new member leaf.
     ///
-    /// The handle is validated (UTS#39, lowercase, single-script, NFC)
-    /// and the id is derived from it. Name and surname are NFC-normalized.
+    /// The handle is validated (UTS#39, lowercase, single-script, NFC).
+    /// Name and surname are NFC-normalized.
     pub fn new(
+        id: MemberId,
         handle: &str,
+        key: MemberKey,
         name: &str,
         surname: &str,
         group_pk: [u8; 32],
-        devices: Vec<[u8; 32]>,
+        devices: Vec<DeviceKey>,
     ) -> Result<Self, OrgMembersError> {
         let validated_handle = validate_handle(handle)?;
-        let id = derive_id(&validated_handle);
         let device_slots = DeviceSlots::new(devices)?;
         Ok(Self {
             id,
             handle: validated_handle,
+            key,
             name: to_nfc(name),
             surname: to_nfc(surname),
             group_pk,
@@ -222,8 +355,12 @@ impl MemberLeaf {
         })
     }
 
-    pub fn id(&self) -> &[u8; 32] {
+    pub fn id(&self) -> &MemberId {
         &self.id
+    }
+
+    pub fn key(&self) -> &MemberKey {
+        &self.key
     }
 
     pub fn handle(&self) -> &str {
@@ -242,12 +379,12 @@ impl MemberLeaf {
         &self.group_pk
     }
 
-    pub fn devices(&self) -> &[[u8; 32]] {
+    pub fn devices(&self) -> &[DeviceKey] {
         self.devices.devices()
     }
 
-    pub fn has_device(&self, ed25519_pk: &[u8; 32]) -> bool {
-        self.devices.has_device(ed25519_pk)
+    pub fn has_device(&self, device: &DeviceKey) -> bool {
+        self.devices.has_device(device)
     }
 
     pub fn device_count(&self) -> usize {
@@ -262,11 +399,13 @@ impl MemberLeaf {
     pub fn canonical_bytes(&self, device_sub_trie_root: &[u8; 32]) -> Vec<u8> {
         let mut buf = Vec::new();
         // id: 32 bytes raw
-        buf.extend_from_slice(&self.id);
+        buf.extend_from_slice(self.id.as_bytes());
         // handle_len + handle bytes
         let handle_bytes = self.handle.as_bytes();
         buf.extend_from_slice(&(handle_bytes.len() as u32).to_le_bytes());
         buf.extend_from_slice(handle_bytes);
+        // member key: 32 bytes raw
+        buf.extend_from_slice(self.key.as_bytes());
         // name_len + name bytes
         let name_bytes = self.name.as_bytes();
         buf.extend_from_slice(&(name_bytes.len() as u32).to_le_bytes());
@@ -286,8 +425,9 @@ impl MemberLeaf {
 impl fmt::Debug for MemberLeaf {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MemberLeaf")
-            .field("id", &format_args!("<32 bytes>"))
+            .field("id", &self.id)
             .field("handle", &"[REDACTED]")
+            .field("key", &self.key)
             .field("name", &"[REDACTED]")
             .field("surname", &"[REDACTED]")
             .field("group_pk", &format_args!("<32 bytes>"))

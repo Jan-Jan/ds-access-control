@@ -16,4 +16,4 @@ pub mod types;
 pub use error::OrgMembersError;
 pub use hasher::TrieHasher;
 pub use trie::OrgTrie;
-pub use types::{MemberLeaf, RootHash};
+pub use types::{DeviceKey, MemberId, MemberKey, MemberLeaf, RootHash};

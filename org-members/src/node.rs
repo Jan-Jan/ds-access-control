@@ -66,6 +66,7 @@ impl Node {
     }
 
     /// Returns true if the hash has been computed.
+    #[allow(dead_code)]
     pub(crate) fn is_calculated(&self) -> bool {
         self.hash.get().is_some()
     }

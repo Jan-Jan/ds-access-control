@@ -1,6 +1,7 @@
+use ed25519_dalek::SigningKey;
 use org_members::hasher::Blake3Hasher;
 use org_members::trie::OrgTrie;
-use org_members::types::{derive_id, validate_handle, MemberLeaf};
+use org_members::types::{validate_handle, DeviceKey, MemberId, MemberKey, MemberLeaf};
 use proptest::prelude::*;
 
 type TestTrie = OrgTrie<Blake3Hasher>;
@@ -14,9 +15,30 @@ fn arb_handle_idx() -> impl Strategy<Value = usize> {
     0..HANDLES.len()
 }
 
+fn member_id(seed: &str) -> MemberId {
+    let hash: [u8; 32] = blake3::hash(seed.as_bytes()).into();
+    MemberId::new(hash)
+}
+
+fn member_key(seed: &str) -> MemberKey {
+    let mut bytes = [0u8; 32];
+    let hash: [u8; 32] = blake3::hash(seed.as_bytes()).into();
+    bytes.copy_from_slice(&hash);
+    MemberKey::new(SigningKey::from_bytes(&bytes).verifying_key())
+}
+
+fn device_key(seed: &str) -> DeviceKey {
+    let mut bytes = [0u8; 32];
+    let hash: [u8; 32] = blake3::hash(seed.as_bytes()).into();
+    bytes.copy_from_slice(&hash);
+    DeviceKey::new(SigningKey::from_bytes(&bytes).verifying_key())
+}
+
 fn make_member(handle: &str, variant: u8) -> Option<MemberLeaf> {
-    let device = [variant.wrapping_add(1); 32];
-    MemberLeaf::new(handle, "Test", "User", [variant; 32], vec![device]).ok()
+    let id = member_id(&format!("{}-id-{}", handle, variant));
+    let mk = member_key(&format!("{}-mk-{}", handle, variant));
+    let dk = device_key(&format!("{}-d-{}", handle, variant));
+    MemberLeaf::new(id, handle, mk, "Test", "User", [variant; 32], vec![dk]).ok()
 }
 
 // ============================================================
@@ -24,7 +46,6 @@ fn make_member(handle: &str, variant: u8) -> Option<MemberLeaf> {
 // ============================================================
 
 proptest! {
-    /// Any arbitrary string must either pass validation or return an error. Never panic.
     #[test]
     fn handle_validation_never_panics(s in "\\PC{0,64}") {
         match validate_handle(&s) {
@@ -35,19 +56,8 @@ proptest! {
                 }
                 prop_assert!(!normalized.contains('.'), "validated handle contains '.'");
             }
-            Err(_) => {
-                // correctly rejected
-            }
+            Err(_) => {}
         }
-    }
-
-    /// Valid handles always produce the same id when re-validated.
-    #[test]
-    fn handle_id_deterministic(idx in arb_handle_idx()) {
-        let handle = HANDLES[idx];
-        let id1 = derive_id(handle);
-        let id2 = derive_id(handle);
-        prop_assert_eq!(id1, id2);
     }
 }
 
@@ -73,7 +83,6 @@ fn arb_op() -> impl Strategy<Value = Op> {
 }
 
 proptest! {
-    /// Random sequence of trie operations never panics and member_count stays consistent.
     #[test]
     fn trie_ops_never_panic_and_count_consistent(ops in proptest::collection::vec(arb_op(), 0..30)) {
         let mut trie = TestTrie::genesis(vec![]).unwrap();
@@ -82,23 +91,26 @@ proptest! {
             match op {
                 Op::Insert(idx) => {
                     let handle = HANDLES[*idx];
-                    if let Some(member) = make_member(handle, *idx as u8) {
-                        if let Ok(new_trie) = trie.insert(member) {
+                    if let Some(m) = make_member(handle, 0) {
+                        if let Ok(new_trie) = trie.insert(m) {
                             trie = new_trie;
                         }
                     }
                 }
                 Op::Update(idx, variant) => {
                     let handle = HANDLES[*idx];
-                    if let Some(member) = make_member(handle, *variant) {
-                        if let Ok(new_trie) = trie.update(member) {
+                    // Use canonical id (variant 0) so update can find it
+                    let id = member_id(&format!("{}-id-0", handle));
+                    let mk = member_key(&format!("{}-mk-{}", handle, *variant));
+                    let dk = device_key(&format!("{}-d-{}", handle, *variant));
+                    if let Ok(m) = MemberLeaf::new(id, handle, mk, "T", "U", [*variant; 32], vec![dk]) {
+                        if let Ok(new_trie) = trie.update(m) {
                             trie = new_trie;
                         }
                     }
                 }
                 Op::Delete(idx) => {
-                    let handle = HANDLES[*idx];
-                    let id = derive_id(handle);
+                    let id = member_id(&format!("{}-id-0", HANDLES[*idx]));
                     if let Ok(new_trie) = trie.delete(&id) {
                         trie = new_trie;
                     }
@@ -137,19 +149,16 @@ fn arb_delta_op() -> impl Strategy<Value = DeltaOp> {
 }
 
 proptest! {
-    /// Delta roundtrip: starting from trie_a, apply ops to get trie_b,
-    /// compute the delta, apply it to trie_a, and verify the root matches trie_b.
     #[test]
     fn delta_roundtrip(
         initial_indices in proptest::collection::vec(arb_handle_idx(), 0..6),
         ops in proptest::collection::vec(arb_delta_op(), 1..10),
     ) {
-        // Build initial trie (deduplicate)
         let mut seen = vec![false; HANDLES.len()];
         let mut initial = Vec::new();
         for idx in &initial_indices {
             if !seen[*idx] {
-                if let Some(m) = make_member(HANDLES[*idx], *idx as u8) {
+                if let Some(m) = make_member(HANDLES[*idx], 0) {
                     initial.push(m);
                     seen[*idx] = true;
                 }
@@ -158,21 +167,18 @@ proptest! {
 
         let trie_a = TestTrie::genesis(initial).unwrap();
 
-        // Apply ops to get trie_b
         let mut trie_b = trie_a.clone();
         for op in &ops {
             match op {
                 DeltaOp::Insert(idx) => {
-                    let handle = HANDLES[*idx];
-                    if let Some(member) = make_member(handle, *idx as u8) {
-                        if let Ok(t) = trie_b.insert(member) {
+                    if let Some(m) = make_member(HANDLES[*idx], 0) {
+                        if let Ok(t) = trie_b.insert(m) {
                             trie_b = t;
                         }
                     }
                 }
                 DeltaOp::Delete(idx) => {
-                    let handle = HANDLES[*idx];
-                    let id = derive_id(handle);
+                    let id = member_id(&format!("{}-id-0", HANDLES[*idx]));
                     if let Ok(t) = trie_b.delete(&id) {
                         trie_b = t;
                     }
@@ -189,7 +195,6 @@ proptest! {
             return Ok(());
         }
 
-        // Apply delta to trie_a
         let candidate = match trie_a.apply_delta(&delta) {
             Ok(c) => c,
             Err(_) => return Ok(()),
@@ -199,10 +204,8 @@ proptest! {
             .verify_against(&trie_b.root_hash())
             .map_err(|e| TestCaseError::fail(format!("delta roundtrip verification failed: {:?}", e)))?;
 
-        prop_assert_eq!(verified.root_hash(), trie_b.root_hash(),
-            "root hash mismatch after delta roundtrip");
-        prop_assert_eq!(verified.member_count(), trie_b.member_count(),
-            "member count mismatch after delta roundtrip");
+        prop_assert_eq!(verified.root_hash(), trie_b.root_hash());
+        prop_assert_eq!(verified.member_count(), trie_b.member_count());
     }
 }
 
@@ -211,8 +214,6 @@ proptest! {
 // ============================================================
 
 proptest! {
-    /// diff_from roundtrip: trie_b.diff_from(trie_a) produces a delta that,
-    /// when applied to trie_a, yields a trie with the same root as trie_b.
     #[test]
     fn diff_roundtrip(
         initial_indices in proptest::collection::vec(arb_handle_idx(), 0..6),
@@ -222,7 +223,7 @@ proptest! {
         let mut initial = Vec::new();
         for idx in &initial_indices {
             if !seen[*idx] {
-                if let Some(m) = make_member(HANDLES[*idx], *idx as u8) {
+                if let Some(m) = make_member(HANDLES[*idx], 0) {
                     initial.push(m);
                     seen[*idx] = true;
                 }
@@ -235,16 +236,14 @@ proptest! {
         for op in &ops {
             match op {
                 DeltaOp::Insert(idx) => {
-                    let handle = HANDLES[*idx];
-                    if let Some(member) = make_member(handle, *idx as u8) {
-                        if let Ok(t) = trie_b.insert(member) {
+                    if let Some(m) = make_member(HANDLES[*idx], 0) {
+                        if let Ok(t) = trie_b.insert(m) {
                             trie_b = t;
                         }
                     }
                 }
                 DeltaOp::Delete(idx) => {
-                    let handle = HANDLES[*idx];
-                    let id = derive_id(handle);
+                    let id = member_id(&format!("{}-id-0", HANDLES[*idx]));
                     if let Ok(t) = trie_b.delete(&id) {
                         trie_b = t;
                     }
@@ -257,7 +256,6 @@ proptest! {
             Err(_) => return Ok(()),
         };
 
-        // Compute diff
         let diff_delta = match trie_b.diff_from(&trie_a) {
             Ok(d) => d,
             Err(_) => return Ok(()),
@@ -267,7 +265,6 @@ proptest! {
             return Ok(());
         }
 
-        // Apply diff to trie_a
         let candidate = match trie_a.apply_delta(&diff_delta) {
             Ok(c) => c,
             Err(_) => return Ok(()),
@@ -287,7 +284,6 @@ proptest! {
 // ============================================================
 
 proptest! {
-    /// After any mutation, the original trie's root hash (if calculated) is unchanged.
     #[test]
     fn mutations_preserve_original(
         initial_indices in proptest::collection::vec(arb_handle_idx(), 1..4),
@@ -297,7 +293,7 @@ proptest! {
         let mut initial = Vec::new();
         for idx in &initial_indices {
             if !seen[*idx] {
-                if let Some(m) = make_member(HANDLES[*idx], *idx as u8) {
+                if let Some(m) = make_member(HANDLES[*idx], 0) {
                     initial.push(m);
                     seen[*idx] = true;
                 }
@@ -312,17 +308,14 @@ proptest! {
         let original_root = original.root_hash();
         let original_count = original.member_count();
 
-        // Try insert
         let handle = HANDLES[op_idx];
-        if let Some(member) = make_member(handle, op_idx as u8) {
-            let _ = original.insert(member);
+        if let Some(m) = make_member(handle, 99) {
+            let _ = original.insert(m);
         }
 
-        // Try delete
-        let id = derive_id(handle);
+        let id = member_id(&format!("{}-id-0", handle));
         let _ = original.delete(&id);
 
-        // Original must be unchanged
         prop_assert_eq!(original.root_hash(), original_root);
         prop_assert_eq!(original.member_count(), original_count);
     }

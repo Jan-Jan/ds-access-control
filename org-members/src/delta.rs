@@ -6,14 +6,14 @@ use crate::hasher::TrieHasher;
 use crate::node::Node;
 use crate::smt::DefaultHashes;
 use crate::trie::OrgTrie;
-use crate::types::{MemberLeaf, RootHash};
+use crate::types::{MemberId, MemberLeaf, RootHash};
 
 /// A set of changes anchored to a specific base trie root.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Delta {
     pub(crate) base_root: RootHash,
-    pub(crate) removed: Vec<[u8; 32]>,
+    pub(crate) removed: Vec<MemberId>,
     pub(crate) upserted: Vec<MemberLeaf>,
 }
 
@@ -23,7 +23,7 @@ impl Delta {
     }
 
     /// Member ids that were removed.
-    pub fn removed(&self) -> &[[u8; 32]] {
+    pub fn removed(&self) -> &[MemberId] {
         &self.removed
     }
 
@@ -44,6 +44,7 @@ pub struct CandidateTrie<H: TrieHasher> {
     pub(crate) root_hash: RootHash,
     pub(crate) last_calculated_root: Option<Arc<Node>>,
     pub(crate) skeleton_index: HashMap<String, String>,
+    pub(crate) handle_index: HashMap<String, MemberId>,
     pub(crate) _hasher: core::marker::PhantomData<H>,
 }
 
@@ -64,6 +65,7 @@ impl<H: TrieHasher> CandidateTrie<H> {
             self.root_hash,
             self.last_calculated_root,
             self.skeleton_index,
+            self.handle_index,
         ))
     }
 }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::device_trie::compute_device_root;
 use crate::hasher::TrieHasher;
 use crate::node::{Node, NodeKind};
-use crate::types::{bit_at, MemberLeaf};
+use crate::types::{MemberId, MemberLeaf};
 
 /// Depth of the Sparse Merkle Tree (256 bits = 256 levels).
 pub const SMT_DEPTH: u16 = 256;
@@ -56,7 +56,7 @@ pub fn insert<H: TrieHasher>(
 /// Removes a member at the position determined by the id bits.
 pub fn remove(
     root: &Arc<Node>,
-    id: &[u8; 32],
+    id: &MemberId,
     defaults: &DefaultHashes,
 ) -> Arc<Node> {
     let empty_leaf = Arc::new(Node::empty(*defaults.empty_leaf()));
@@ -65,7 +65,7 @@ pub fn remove(
 
 fn insert_at(
     node: &Arc<Node>,
-    id: &[u8; 32],
+    id: &MemberId,
     new_leaf: Arc<Node>,
     depth: u16,
     defaults: &DefaultHashes,
@@ -74,7 +74,7 @@ fn insert_at(
         return new_leaf;
     }
 
-    let go_right = bit_at(id, depth);
+    let go_right = id.bit(depth);
 
     let (left, right) = match &node.kind {
         NodeKind::Internal { left, right } => (left.clone(), right.clone()),
@@ -122,12 +122,12 @@ pub fn recalculate_hashes<H: TrieHasher>(node: &Arc<Node>) -> [u8; 32] {
 }
 
 /// Looks up a member by id, traversing the SMT by id bits.
-pub fn get_member(root: &Arc<Node>, id: &[u8; 32]) -> Option<MemberLeaf> {
+pub fn get_member(root: &Arc<Node>, id: &MemberId) -> Option<MemberLeaf> {
     let mut current = root.clone();
     for depth in 0..SMT_DEPTH {
         match &current.kind {
             NodeKind::Internal { left, right } => {
-                current = if bit_at(id, depth) {
+                current = if id.bit(depth) {
                     right.clone()
                 } else {
                     left.clone()
@@ -168,7 +168,7 @@ fn collect_members_recursive(node: &Arc<Node>, members: &mut Vec<MemberLeaf>) {
 pub fn diff_tries(
     old: &Arc<Node>,
     new: &Arc<Node>,
-) -> (Vec<[u8; 32]>, Vec<MemberLeaf>) {
+) -> (Vec<MemberId>, Vec<MemberLeaf>) {
     let mut removed = Vec::new();
     let mut upserted = Vec::new();
     diff_recursive(old, new, &mut removed, &mut upserted);
@@ -178,7 +178,7 @@ pub fn diff_tries(
 fn diff_recursive(
     old: &Arc<Node>,
     new: &Arc<Node>,
-    removed: &mut Vec<[u8; 32]>,
+    removed: &mut Vec<MemberId>,
     upserted: &mut Vec<MemberLeaf>,
 ) {
     if let (Some(old_h), Some(new_h)) = (old.hash(), new.hash()) {

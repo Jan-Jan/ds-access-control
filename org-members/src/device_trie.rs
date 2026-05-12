@@ -13,7 +13,7 @@ pub fn compute_device_root<H: TrieHasher>(devices: &DeviceSlots) -> [u8; 32] {
 
     // Level 0: 4 leaf hashes
     let leaves: [_; 4] = core::array::from_fn(|i| match slots[i] {
-        Some(pk) => H::hash_device_leaf(&pk),
+        Some(device) => H::hash_device_leaf(device.as_bytes()),
         None => empty_leaf,
     });
 
