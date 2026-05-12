@@ -96,42 +96,32 @@ proptest! {
                 Op::Insert(idx) => {
                     let handle = HANDLES[*idx];
                     if let Some(m) = make_member(handle, 0) {
-                        if let Ok(new_trie) = trie.insert(m) {
+                        if let Ok(new_trie) = trie.add_member(m) {
                             trie = new_trie;
                         }
                     }
                 }
                 Op::Update(idx, variant) => {
-                    let handle = HANDLES[*idx];
-                    // Use canonical id (variant 0) so update can find it
-                    let id = member_id(&format!("{}-id-0", handle));
-                    let mk = member_key(&format!("{}-mk-{}", handle, *variant));
-                    let dk = device_key(&format!("{}-d-{}", handle, *variant));
-                    if let Ok(m) = MemberLeaf::new(id, handle, mk, "T", "U", vec![dk]) {
-                        if let Ok(new_trie) = trie.update(m) {
-                            trie = new_trie;
-                        }
+                    // Rotate the p2p_key (the most common update).
+                    let id = member_id(&format!("{}-id-0", HANDLES[*idx]));
+                    let mk = member_key(&format!("{}-mk-{}", HANDLES[*idx], *variant));
+                    if let Ok(new_trie) = trie.rotate_p2p_key(&id, mk) {
+                        trie = new_trie;
                     }
                 }
                 Op::UpdateRehandle(id_idx, handle_idx) => {
-                    // Update the member at id_idx, retargeting to handle_idx's handle.
-                    // If handle_idx's handle is already taken by another member, this
-                    // should fail with DuplicateHandle (must not panic or corrupt).
+                    // Retarget the member's handle to another candidate handle.
+                    // If handle_idx's handle is already taken by another member,
+                    // this should fail with DuplicateHandle (must not panic).
                     let id = member_id(&format!("{}-id-0", HANDLES[*id_idx]));
                     let new_handle = HANDLES[*handle_idx];
-                    let mk = member_key(&format!("{}-mk-0", HANDLES[*id_idx]));
-                    let dk = device_key(&format!("{}-d-0", HANDLES[*id_idx]));
-                    if let Ok(m) =
-                        MemberLeaf::new(id, new_handle, mk, "T", "U", vec![dk])
-                    {
-                        if let Ok(new_trie) = trie.update(m) {
-                            trie = new_trie;
-                        }
+                    if let Ok(new_trie) = trie.update_handle(&id, new_handle) {
+                        trie = new_trie;
                     }
                 }
                 Op::Delete(idx) => {
                     let id = member_id(&format!("{}-id-0", HANDLES[*idx]));
-                    if let Ok(new_trie) = trie.delete(&id) {
+                    if let Ok(new_trie) = trie.delete_member(&id) {
                         trie = new_trie;
                     }
                 }
@@ -192,14 +182,14 @@ proptest! {
             match op {
                 DeltaOp::Insert(idx) => {
                     if let Some(m) = make_member(HANDLES[*idx], 0) {
-                        if let Ok(t) = trie_b.insert(m) {
+                        if let Ok(t) = trie_b.add_member(m) {
                             trie_b = t;
                         }
                     }
                 }
                 DeltaOp::Delete(idx) => {
                     let id = member_id(&format!("{}-id-0", HANDLES[*idx]));
-                    if let Ok(t) = trie_b.delete(&id) {
+                    if let Ok(t) = trie_b.delete_member(&id) {
                         trie_b = t;
                     }
                 }
@@ -257,14 +247,14 @@ proptest! {
             match op {
                 DeltaOp::Insert(idx) => {
                     if let Some(m) = make_member(HANDLES[*idx], 0) {
-                        if let Ok(t) = trie_b.insert(m) {
+                        if let Ok(t) = trie_b.add_member(m) {
                             trie_b = t;
                         }
                     }
                 }
                 DeltaOp::Delete(idx) => {
                     let id = member_id(&format!("{}-id-0", HANDLES[*idx]));
-                    if let Ok(t) = trie_b.delete(&id) {
+                    if let Ok(t) = trie_b.delete_member(&id) {
                         trie_b = t;
                     }
                 }
@@ -330,11 +320,11 @@ proptest! {
 
         let handle = HANDLES[op_idx];
         if let Some(m) = make_member(handle, 99) {
-            let _ = original.insert(m);
+            let _ = original.add_member(m);
         }
 
         let id = member_id(&format!("{}-id-0", handle));
-        let _ = original.delete(&id);
+        let _ = original.delete_member(&id);
 
         prop_assert_eq!(original.root_hash().unwrap(), original_root);
         prop_assert_eq!(original.member_count(), original_count);

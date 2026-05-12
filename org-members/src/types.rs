@@ -270,10 +270,11 @@ impl<'de> serde::Deserialize<'de> for P2pDeviceSlots {
 }
 
 impl P2pDeviceSlots {
+    /// Constructs a P2pDeviceSlots from a list of device keys.
+    /// Accepts 0..=MAX_DEVICES devices: an empty list is allowed because
+    /// `emergency_isolate_member` produces a member with zero devices. Normal
+    /// member creation (via `MemberLeaf::new`) requires ≥1 device.
     pub fn new(mut devices: Vec<P2pDeviceKey>) -> Result<Self, OrgMembersError> {
-        if devices.is_empty() {
-            return Err(OrgMembersError::EmptyDeviceList);
-        }
         if devices.len() > MAX_DEVICES {
             return Err(OrgMembersError::DeviceSlotsFull);
         }
@@ -318,9 +319,9 @@ impl P2pDeviceSlots {
             .map_err(|_| OrgMembersError::DeviceNotFound)?;
         let mut new_slots = self.slots.clone();
         new_slots.remove(idx);
-        if new_slots.is_empty() {
-            return Err(OrgMembersError::EmptyDeviceList);
-        }
+        // Empty is allowed: removing the last device leaves the member in an
+        // isolated state (no devices). Callers that need to enforce ≥1 should
+        // check the result.
         Ok(Self { slots: new_slots })
     }
 
@@ -407,7 +408,9 @@ impl MemberLeaf {
     /// Constructs a new member leaf.
     ///
     /// The handle is validated (UTS#39, lowercase, single-script, NFC).
-    /// Name and surname are NFC-normalized.
+    /// Name and surname are NFC-normalized. Requires ≥1 device -- new members
+    /// must have at least one device. (An existing member can be reduced to
+    /// zero devices via `emergency_isolate_member` on the trie.)
     pub fn new(
         id: MemberId,
         handle: &str,
@@ -416,6 +419,9 @@ impl MemberLeaf {
         surname: &str,
         p2p_devices: Vec<P2pDeviceKey>,
     ) -> Result<Self, OrgMembersError> {
+        if p2p_devices.is_empty() {
+            return Err(OrgMembersError::EmptyDeviceList);
+        }
         let validated_handle = validate_handle(handle)?;
         let device_slots = P2pDeviceSlots::new(p2p_devices)?;
         Ok(Self {
@@ -426,6 +432,35 @@ impl MemberLeaf {
             surname: to_nfc(surname),
             p2p_devices: device_slots,
         })
+    }
+
+    // === Crate-private field modifiers ===
+    //
+    // These produce modified copies of `self`. They bypass MemberLeaf::new's
+    // invariants and are intended for use by the trie's domain operations
+    // (update_name_surname, update_handle, rotate_p2p_key, add/delete p2p_device,
+    // emergency_isolate_member). They do NOT validate the handle -- callers
+    // must validate before calling `with_handle`.
+
+    pub(crate) fn with_name_surname(mut self, name: String, surname: String) -> Self {
+        self.name = name;
+        self.surname = surname;
+        self
+    }
+
+    pub(crate) fn with_handle(mut self, validated_handle: String) -> Self {
+        self.handle = validated_handle;
+        self
+    }
+
+    pub(crate) fn with_p2p_key(mut self, key: P2pMemberKey) -> Self {
+        self.p2p_key = key;
+        self
+    }
+
+    pub(crate) fn with_p2p_device_slots(mut self, slots: P2pDeviceSlots) -> Self {
+        self.p2p_devices = slots;
+        self
     }
 
     pub fn id(&self) -> &MemberId {

@@ -12,7 +12,10 @@ use crate::hasher::TrieHasher;
 use crate::node::Node;
 use crate::smt::{self, DefaultHashes};
 use crate::normalize::to_nfc;
-use crate::types::{handle_skeleton, MemberId, MemberLeaf, RootHash};
+use crate::types::{
+    handle_skeleton, validate_handle, MemberId, MemberLeaf, P2pDeviceKey, P2pDeviceSlots,
+    P2pMemberKey, RootHash,
+};
 
 /// An immutable binary Sparse Merkle Tree for organisation membership.
 ///
@@ -132,15 +135,121 @@ impl<H: TrieHasher> OrgTrie<H> {
         smt::collect_members(&self.root)
     }
 
-    /// Inserts a new member. Fails if the id already exists or if the handle
-    /// (or a confusable variant) is already taken.
-    pub fn insert(&self, leaf: MemberLeaf) -> Result<Self, OrgMembersError> {
-        // Check key uniqueness
+    // ====================================================================
+    // Public domain operations
+    // ====================================================================
+
+    /// Adds a new member. Fails if the member id already exists, the handle is
+    /// already taken, or the handle confusably collides with an existing handle.
+    /// New members must have ≥1 device (enforced by `MemberLeaf::new`).
+    pub fn add_member(&self, leaf: MemberLeaf) -> Result<Self, OrgMembersError> {
+        self.insert_leaf(leaf)
+    }
+
+    /// Removes a member by id. Their handle becomes available for re-use.
+    pub fn delete_member(&self, id: &MemberId) -> Result<Self, OrgMembersError> {
+        self.delete_by_id(id)
+    }
+
+    /// Updates a member's name and surname. Both are NFC-normalized.
+    pub fn update_name_surname(
+        &self,
+        id: &MemberId,
+        name: &str,
+        surname: &str,
+    ) -> Result<Self, OrgMembersError> {
+        let existing = smt::get_member(&self.root, id).ok_or(OrgMembersError::IdNotFound)?;
+        let new_leaf = existing.with_name_surname(to_nfc(name), to_nfc(surname));
+        self.update_leaf(new_leaf)
+    }
+
+    /// Updates a member's handle. The new handle must pass validation
+    /// (UTS#39, NFC, lowercase, no `.`, single-script) and must not be
+    /// taken by, or confusably collide with, another member's handle.
+    pub fn update_handle(
+        &self,
+        id: &MemberId,
+        new_handle: &str,
+    ) -> Result<Self, OrgMembersError> {
+        let existing = smt::get_member(&self.root, id).ok_or(OrgMembersError::IdNotFound)?;
+        let validated = validate_handle(new_handle)?;
+        let new_leaf = existing.with_handle(validated);
+        self.update_leaf(new_leaf)
+    }
+
+    /// Rotates a member's peer-to-peer key (CGKA / Keyhive key).
+    /// All other fields, including device set, are unchanged.
+    pub fn rotate_p2p_key(
+        &self,
+        id: &MemberId,
+        new_p2p_key: P2pMemberKey,
+    ) -> Result<Self, OrgMembersError> {
+        let existing = smt::get_member(&self.root, id).ok_or(OrgMembersError::IdNotFound)?;
+        let new_leaf = existing.with_p2p_key(new_p2p_key);
+        self.update_leaf(new_leaf)
+    }
+
+    /// Adds a peer-to-peer device key to a member. Fails if the device is
+    /// already present or the member already has `MAX_DEVICES` (4) devices.
+    /// Does NOT rotate the p2p_key -- a new device is trusted with the
+    /// current key.
+    pub fn add_p2p_device(
+        &self,
+        id: &MemberId,
+        device: P2pDeviceKey,
+    ) -> Result<Self, OrgMembersError> {
+        let existing = smt::get_member(&self.root, id).ok_or(OrgMembersError::IdNotFound)?;
+        let new_slots = existing.p2p_device_slots().add_device(device)?;
+        let new_leaf = existing.with_p2p_device_slots(new_slots);
+        self.update_leaf(new_leaf)
+    }
+
+    /// Deletes a peer-to-peer device key from a member AND rotates the
+    /// member's p2p_key. Both are required: the deleted device had access to
+    /// the old p2p_key (which is the CGKA group key shared with the member),
+    /// so rotating the key invalidates that access. If the deleted device was
+    /// the last one, the member becomes isolated (zero devices).
+    pub fn delete_p2p_device(
+        &self,
+        id: &MemberId,
+        device: &P2pDeviceKey,
+        new_p2p_key: P2pMemberKey,
+    ) -> Result<Self, OrgMembersError> {
+        let existing = smt::get_member(&self.root, id).ok_or(OrgMembersError::IdNotFound)?;
+        let new_slots = existing.p2p_device_slots().remove_device(device)?;
+        let new_leaf = existing
+            .with_p2p_device_slots(new_slots)
+            .with_p2p_key(new_p2p_key);
+        self.update_leaf(new_leaf)
+    }
+
+    /// Emergency operation: removes ALL of a member's devices AND rotates the
+    /// p2p_key. Use when multiple devices are compromised or the situation is
+    /// unclear and you want to cut off all access at once. The member remains
+    /// in the trie with zero devices (isolated state). Re-add a device via
+    /// `add_p2p_device` to un-isolate.
+    pub fn emergency_isolate_member(
+        &self,
+        id: &MemberId,
+        new_p2p_key: P2pMemberKey,
+    ) -> Result<Self, OrgMembersError> {
+        let existing = smt::get_member(&self.root, id).ok_or(OrgMembersError::IdNotFound)?;
+        let empty_slots = P2pDeviceSlots::new(Vec::new())?;
+        let new_leaf = existing
+            .with_p2p_device_slots(empty_slots)
+            .with_p2p_key(new_p2p_key);
+        self.update_leaf(new_leaf)
+    }
+
+    // ====================================================================
+    // Crate-private helpers used by the domain operations and apply_delta
+    // ====================================================================
+
+    fn insert_leaf(&self, leaf: MemberLeaf) -> Result<Self, OrgMembersError> {
         if smt::get_member(&self.root, leaf.id()).is_some() {
             return Err(OrgMembersError::DuplicateId);
         }
 
-        // Check handle uniqueness (via skeleton)
         let mut new_skeleton_index = self.skeleton_index.clone();
         let mut new_handle_index = self.handle_index.clone();
         let skeleton = handle_skeleton(leaf.handle());
@@ -168,23 +277,18 @@ impl<H: TrieHasher> OrgTrie<H> {
         })
     }
 
-    /// Updates an existing member (looked up by key). Fails if the key doesn't exist
-    /// or if the new handle conflicts with a different member's handle.
-    pub fn update(&self, leaf: MemberLeaf) -> Result<Self, OrgMembersError> {
-        let existing = smt::get_member(&self.root, leaf.id())
-            .ok_or(OrgMembersError::IdNotFound)?;
+    fn update_leaf(&self, leaf: MemberLeaf) -> Result<Self, OrgMembersError> {
+        let existing =
+            smt::get_member(&self.root, leaf.id()).ok_or(OrgMembersError::IdNotFound)?;
 
         let mut new_skeleton_index = self.skeleton_index.clone();
         let mut new_handle_index = self.handle_index.clone();
 
-        // If the handle changed, check the new handle is unique and update the index
         if existing.handle() != leaf.handle() {
-            // Remove old handle's skeleton and handle index entry
             let old_skeleton = handle_skeleton(existing.handle());
             new_skeleton_index.remove(&old_skeleton);
             new_handle_index.remove(existing.handle());
 
-            // Check new handle doesn't collide
             let new_skeleton = handle_skeleton(leaf.handle());
             if let Some(existing_handle) = new_skeleton_index.get(&new_skeleton) {
                 if existing_handle != leaf.handle() {
@@ -211,10 +315,8 @@ impl<H: TrieHasher> OrgTrie<H> {
         })
     }
 
-    /// Removes a member by id.
-    pub fn delete(&self, id: &MemberId) -> Result<Self, OrgMembersError> {
-        let existing = smt::get_member(&self.root, id)
-            .ok_or(OrgMembersError::IdNotFound)?;
+    fn delete_by_id(&self, id: &MemberId) -> Result<Self, OrgMembersError> {
+        let existing = smt::get_member(&self.root, id).ok_or(OrgMembersError::IdNotFound)?;
 
         let new_root = smt::remove(&self.root, id, &self.defaults);
 

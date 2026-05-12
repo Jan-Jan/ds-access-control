@@ -136,7 +136,7 @@ fn genesis_empty_is_ok() {
 #[test]
 fn insert_adds_member() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
-    let trie = trie.insert(bob()).unwrap();
+    let trie = trie.add_member(bob()).unwrap();
     assert!(!trie.is_calculated());
     assert_eq!(trie.member_count(), 2);
     assert!(trie.contains_handle("bob"));
@@ -150,7 +150,7 @@ fn insert_adds_member() {
 #[test]
 fn insert_duplicate_id_fails() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
-    let err = trie.insert(alice());
+    let err = trie.add_member(alice());
     assert_eq!(err.unwrap_err(), OrgMembersError::DuplicateId);
 }
 
@@ -165,60 +165,293 @@ fn insert_duplicate_handle_different_id_fails() {
         "Alice",
         vec![device_key("imposter-d")])
     .unwrap();
-    let err = trie.insert(imposter);
+    let err = trie.add_member(imposter);
     assert_eq!(err.unwrap_err(), OrgMembersError::DuplicateHandle);
 }
 
-// --- Update tests ---
+// --- update_name_surname tests ---
 
 #[test]
-fn update_existing_member() {
+fn update_name_surname_changes_pii() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
     let root_before = trie.root_hash().unwrap();
 
-    // Update alice with new key, surname, device (same id, same handle)
-    let updated = MemberLeaf::new(
-        member_id("alice-id"),
-        "alice",
-        member_key("alice-rotated-mk"),
-        "Alice",
-        "Wonderland",
-        vec![device_key("alice-new-d")])
-    .unwrap();
-    let trie = trie.update(updated).unwrap();
+    let trie = trie
+        .update_name_surname(&member_id("alice-id"), "Alyx", "Wonderland")
+        .unwrap();
     let (trie, _) = trie.recalculate().unwrap();
 
-    assert_eq!(trie.member_count(), 1);
     let member = trie.get(&member_id("alice-id")).unwrap();
+    assert_eq!(member.name(), "Alyx");
     assert_eq!(member.surname(), "Wonderland");
-    assert_eq!(member.p2p_key(), &member_key("alice-rotated-mk"));
+    // Other fields unchanged
+    assert_eq!(member.handle(), "alice");
+    assert_eq!(member.p2p_key(), &member_key("alice-mk"));
+    assert_eq!(member.p2p_device_count(), 1);
     assert_ne!(trie.root_hash().unwrap(), root_before);
 }
 
 #[test]
-fn update_nonexistent_fails() {
+fn update_name_surname_nfc_normalizes() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
-    let err = trie.update(bob());
-    assert_eq!(err.unwrap_err(), OrgMembersError::IdNotFound);
+    let trie = trie
+        .update_name_surname(&member_id("alice-id"), "e\u{0301}ric", "X")
+        .unwrap();
+    let (trie, _) = trie.recalculate().unwrap();
+    let member = trie.get(&member_id("alice-id")).unwrap();
+    assert_eq!(member.name(), "\u{00E9}ric"); // NFC composed
 }
 
 #[test]
-fn update_handle_change() {
+fn update_name_surname_nonexistent_fails() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
-    let renamed = MemberLeaf::new(
-        member_id("alice-id"),
-        "alicia",
-        member_key("alice-mk"),
-        "Alice",
-        "Smith",
-        vec![device_key("alice-d1")])
-    .unwrap();
-    let trie = trie.update(renamed).unwrap();
+    let err = trie.update_name_surname(&member_id("ghost-id"), "X", "Y");
+    assert_eq!(err.unwrap_err(), OrgMembersError::IdNotFound);
+}
+
+// --- update_handle tests ---
+
+#[test]
+fn update_handle_renames_member() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let trie = trie.update_handle(&member_id("alice-id"), "alicia").unwrap();
     let (trie, _) = trie.recalculate().unwrap();
 
     assert!(!trie.contains_handle("alice"));
     assert!(trie.contains_handle("alicia"));
     assert!(trie.contains(&member_id("alice-id")));
+    assert_eq!(trie.get_by_handle("alicia").unwrap().name(), "Alice");
+}
+
+#[test]
+fn update_handle_nonexistent_fails() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let err = trie.update_handle(&member_id("ghost-id"), "newname");
+    assert_eq!(err.unwrap_err(), OrgMembersError::IdNotFound);
+}
+
+#[test]
+fn update_handle_rejects_invalid() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let err = trie.update_handle(&member_id("alice-id"), "Alice"); // uppercase
+    assert!(matches!(
+        err.unwrap_err(),
+        OrgMembersError::InvalidHandle(_)
+    ));
+}
+
+#[test]
+fn update_handle_rejects_collision() {
+    let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    let err = trie.update_handle(&member_id("alice-id"), "bob");
+    assert_eq!(err.unwrap_err(), OrgMembersError::DuplicateHandle);
+}
+
+// --- rotate_p2p_key tests ---
+
+#[test]
+fn rotate_p2p_key_changes_only_key() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let root_before = trie.root_hash().unwrap();
+    let new_key = member_key("alice-rotated");
+
+    let trie = trie
+        .rotate_p2p_key(&member_id("alice-id"), new_key)
+        .unwrap();
+    let (trie, _) = trie.recalculate().unwrap();
+
+    let member = trie.get(&member_id("alice-id")).unwrap();
+    assert_eq!(member.p2p_key(), &new_key);
+    // Other fields unchanged
+    assert_eq!(member.handle(), "alice");
+    assert_eq!(member.name(), "Alice");
+    assert_eq!(member.p2p_device_count(), 1);
+    assert_ne!(trie.root_hash().unwrap(), root_before);
+}
+
+#[test]
+fn rotate_p2p_key_nonexistent_fails() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let err = trie.rotate_p2p_key(&member_id("ghost-id"), member_key("any"));
+    assert_eq!(err.unwrap_err(), OrgMembersError::IdNotFound);
+}
+
+// --- add_p2p_device tests ---
+
+#[test]
+fn add_p2p_device_adds_a_device() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let new_device = device_key("alice-d2");
+
+    let trie = trie
+        .add_p2p_device(&member_id("alice-id"), new_device)
+        .unwrap();
+    let (trie, _) = trie.recalculate().unwrap();
+
+    let member = trie.get(&member_id("alice-id")).unwrap();
+    assert_eq!(member.p2p_device_count(), 2);
+    assert!(member.has_p2p_device(&device_key("alice-d1")));
+    assert!(member.has_p2p_device(&new_device));
+    // Key unchanged
+    assert_eq!(member.p2p_key(), &member_key("alice-mk"));
+}
+
+#[test]
+fn add_p2p_device_rejects_duplicate() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let err = trie.add_p2p_device(&member_id("alice-id"), device_key("alice-d1"));
+    assert_eq!(err.unwrap_err(), OrgMembersError::DuplicateDevice);
+}
+
+#[test]
+fn add_p2p_device_rejects_when_full() {
+    // alice starts with 1 device; add 3 more to fill (max 4)
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let trie = trie
+        .add_p2p_device(&member_id("alice-id"), device_key("d2"))
+        .unwrap();
+    let trie = trie
+        .add_p2p_device(&member_id("alice-id"), device_key("d3"))
+        .unwrap();
+    let trie = trie
+        .add_p2p_device(&member_id("alice-id"), device_key("d4"))
+        .unwrap();
+    // 5th device should fail
+    let err = trie.add_p2p_device(&member_id("alice-id"), device_key("d5"));
+    assert_eq!(err.unwrap_err(), OrgMembersError::DeviceSlotsFull);
+}
+
+#[test]
+fn add_p2p_device_nonexistent_member_fails() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let err = trie.add_p2p_device(&member_id("ghost-id"), device_key("d"));
+    assert_eq!(err.unwrap_err(), OrgMembersError::IdNotFound);
+}
+
+// --- delete_p2p_device tests ---
+
+#[test]
+fn delete_p2p_device_removes_and_rotates_key() {
+    let trie = TestTrie::genesis(vec![jan_jan()]).unwrap();
+    // jan-jan has 2 devices: d1 and d2
+    let new_key = member_key("jan-rotated");
+
+    let trie = trie
+        .delete_p2p_device(
+            &member_id("jan-jan-id"),
+            &device_key("jan-jan-d1"),
+            new_key,
+        )
+        .unwrap();
+    let (trie, _) = trie.recalculate().unwrap();
+
+    let member = trie.get(&member_id("jan-jan-id")).unwrap();
+    assert_eq!(member.p2p_device_count(), 1);
+    assert!(!member.has_p2p_device(&device_key("jan-jan-d1")));
+    assert!(member.has_p2p_device(&device_key("jan-jan-d2")));
+    assert_eq!(member.p2p_key(), &new_key);
+}
+
+#[test]
+fn delete_p2p_device_last_device_isolates() {
+    // alice has 1 device. Removing it leaves her in isolated state (0 devices).
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let new_key = member_key("alice-isolated");
+
+    let trie = trie
+        .delete_p2p_device(
+            &member_id("alice-id"),
+            &device_key("alice-d1"),
+            new_key,
+        )
+        .unwrap();
+    let (trie, _) = trie.recalculate().unwrap();
+
+    let member = trie.get(&member_id("alice-id")).unwrap();
+    assert_eq!(member.p2p_device_count(), 0);
+    assert_eq!(member.p2p_key(), &new_key);
+}
+
+#[test]
+fn delete_p2p_device_unknown_device_fails() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let err = trie.delete_p2p_device(
+        &member_id("alice-id"),
+        &device_key("does-not-exist"),
+        member_key("new"),
+    );
+    assert_eq!(err.unwrap_err(), OrgMembersError::DeviceNotFound);
+}
+
+#[test]
+fn delete_p2p_device_nonexistent_member_fails() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let err = trie.delete_p2p_device(
+        &member_id("ghost-id"),
+        &device_key("alice-d1"),
+        member_key("new"),
+    );
+    assert_eq!(err.unwrap_err(), OrgMembersError::IdNotFound);
+}
+
+// --- emergency_isolate_member tests ---
+
+#[test]
+fn emergency_isolate_member_removes_all_devices_and_rotates_key() {
+    let trie = TestTrie::genesis(vec![jan_jan()]).unwrap();
+    // jan-jan has 2 devices
+    let new_key = member_key("jan-isolated");
+
+    let trie = trie
+        .emergency_isolate_member(&member_id("jan-jan-id"), new_key)
+        .unwrap();
+    let (trie, _) = trie.recalculate().unwrap();
+
+    let member = trie.get(&member_id("jan-jan-id")).unwrap();
+    assert_eq!(member.p2p_device_count(), 0);
+    assert!(!member.has_p2p_device(&device_key("jan-jan-d1")));
+    assert!(!member.has_p2p_device(&device_key("jan-jan-d2")));
+    assert_eq!(member.p2p_key(), &new_key);
+    // Other PII unchanged
+    assert_eq!(member.handle(), "jan-jan");
+    assert_eq!(member.surname(), "Gödel");
+}
+
+#[test]
+fn emergency_isolate_member_keeps_member_in_trie() {
+    let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    let trie = trie
+        .emergency_isolate_member(&member_id("alice-id"), member_key("new"))
+        .unwrap();
+    let (trie, _) = trie.recalculate().unwrap();
+
+    assert_eq!(trie.member_count(), 2); // alice still there, just isolated
+    assert!(trie.contains(&member_id("alice-id")));
+    assert!(trie.contains_handle("alice"));
+}
+
+#[test]
+fn emergency_isolate_member_then_readd_device_unisolates() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let trie = trie
+        .emergency_isolate_member(&member_id("alice-id"), member_key("recovered"))
+        .unwrap();
+    // Now re-add a device
+    let trie = trie
+        .add_p2p_device(&member_id("alice-id"), device_key("alice-recovered-d"))
+        .unwrap();
+    let (trie, _) = trie.recalculate().unwrap();
+
+    let member = trie.get(&member_id("alice-id")).unwrap();
+    assert_eq!(member.p2p_device_count(), 1);
+    assert_eq!(member.p2p_key(), &member_key("recovered"));
+}
+
+#[test]
+fn emergency_isolate_member_nonexistent_fails() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let err = trie.emergency_isolate_member(&member_id("ghost-id"), member_key("any"));
+    assert_eq!(err.unwrap_err(), OrgMembersError::IdNotFound);
 }
 
 // --- Delete tests ---
@@ -226,7 +459,7 @@ fn update_handle_change() {
 #[test]
 fn delete_removes_member() {
     let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
-    let trie = trie.delete(&member_id("alice-id")).unwrap();
+    let trie = trie.delete_member(&member_id("alice-id")).unwrap();
     let (trie, delta) = trie.recalculate().unwrap();
 
     assert_eq!(trie.member_count(), 1);
@@ -238,7 +471,7 @@ fn delete_removes_member() {
 #[test]
 fn delete_nonexistent_fails() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
-    let err = trie.delete(&member_id("eve-id"));
+    let err = trie.delete_member(&member_id("eve-id"));
     assert_eq!(err.unwrap_err(), OrgMembersError::IdNotFound);
 }
 
@@ -248,7 +481,7 @@ fn delete_nonexistent_fails() {
 fn insert_does_not_mutate_original() {
     let original = TestTrie::genesis(vec![alice()]).unwrap();
     let original_root = original.root_hash().unwrap();
-    let _modified = original.insert(bob()).unwrap();
+    let _modified = original.add_member(bob()).unwrap();
 
     assert_eq!(original.member_count(), 1);
     assert_eq!(original.root_hash().unwrap(), original_root);
@@ -259,7 +492,7 @@ fn insert_does_not_mutate_original() {
 fn delete_does_not_mutate_original() {
     let original = TestTrie::genesis(vec![alice(), bob()]).unwrap();
     let original_root = original.root_hash().unwrap();
-    let _modified = original.delete(&member_id("alice-id")).unwrap();
+    let _modified = original.delete_member(&member_id("alice-id")).unwrap();
 
     assert_eq!(original.member_count(), 2);
     assert_eq!(original.root_hash().unwrap(), original_root);
@@ -272,8 +505,8 @@ fn delete_does_not_mutate_original() {
 fn delta_apply_and_verify() {
     let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
 
-    let updated = trie.insert(charlie()).unwrap();
-    let updated = updated.delete(&member_id("alice-id")).unwrap();
+    let updated = trie.add_member(charlie()).unwrap();
+    let updated = updated.delete_member(&member_id("alice-id")).unwrap();
     let (updated, delta) = updated.recalculate().unwrap();
 
     let candidate = trie.apply_delta(&delta).unwrap();
@@ -291,7 +524,7 @@ fn delta_base_mismatch_fails() {
     let parity_trie = TestTrie::genesis(vec![alice()]).unwrap();
     let other_trie = TestTrie::genesis(vec![bob()]).unwrap();
 
-    let modified = parity_trie.insert(charlie()).unwrap();
+    let modified = parity_trie.add_member(charlie()).unwrap();
     let (_, delta) = modified.recalculate().unwrap();
 
     let err = other_trie.apply_delta(&delta);
@@ -301,7 +534,7 @@ fn delta_base_mismatch_fails() {
 #[test]
 fn candidate_verify_wrong_root_fails() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
-    let modified = trie.insert(bob()).unwrap();
+    let modified = trie.add_member(bob()).unwrap();
     let (_, delta) = modified.recalculate().unwrap();
 
     let candidate = trie.apply_delta(&delta).unwrap();
@@ -316,8 +549,8 @@ fn candidate_verify_wrong_root_fails() {
 fn diff_produces_valid_delta() {
     let old_trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
 
-    let current = old_trie.insert(charlie()).unwrap();
-    let current = current.delete(&member_id("alice-id")).unwrap();
+    let current = old_trie.add_member(charlie()).unwrap();
+    let current = current.delete_member(&member_id("alice-id")).unwrap();
     let (current, _) = current.recalculate().unwrap();
 
     let catchup_delta = current.diff_from(&old_trie).unwrap();
@@ -452,7 +685,7 @@ fn insert_rejects_confusable_handle() {
     .unwrap();
 
     let trie = TestTrie::genesis(vec![m1]).unwrap();
-    let err = trie.insert(m2).unwrap_err();
+    let err = trie.add_member(m2).unwrap_err();
     assert_eq!(err, OrgMembersError::ConfusableHandle);
 }
 
@@ -474,15 +707,7 @@ fn update_rejects_confusable_handle() {
     let trie = TestTrie::genesis(vec![m1, m2]).unwrap();
 
     // Now try to update alice's handle to a confusable of h1.
-    let renamed = MemberLeaf::new(
-        member_id("alice-id"),
-        &h2,
-        member_key("alice-mk"),
-        "Alice",
-        "Smith",
-        vec![device_key("alice-d1")])
-    .unwrap();
-    let err = trie.update(renamed).unwrap_err();
+    let err = trie.update_handle(&member_id("alice-id"), &h2).unwrap_err();
     assert_eq!(err, OrgMembersError::ConfusableHandle);
 }
 
@@ -594,10 +819,10 @@ fn different_insertion_order_same_root() {
 fn batch_mutations_then_recalculate() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
 
-    let trie = trie.insert(bob()).unwrap();
-    let trie = trie.insert(charlie()).unwrap();
-    let trie = trie.insert(jan_jan()).unwrap();
-    let trie = trie.delete(&member_id("alice-id")).unwrap();
+    let trie = trie.add_member(bob()).unwrap();
+    let trie = trie.add_member(charlie()).unwrap();
+    let trie = trie.add_member(jan_jan()).unwrap();
+    let trie = trie.delete_member(&member_id("alice-id")).unwrap();
 
     let (trie, delta) = trie.recalculate().unwrap();
 
@@ -671,9 +896,9 @@ fn pending_changes_empty_when_no_mutations() {
 #[test]
 fn pending_changes_reflects_mutations() {
     let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
-    let trie = trie.insert(charlie()).unwrap();
-    let trie = trie.insert(jan_jan()).unwrap();
-    let trie = trie.delete(&member_id("alice-id")).unwrap();
+    let trie = trie.add_member(charlie()).unwrap();
+    let trie = trie.add_member(jan_jan()).unwrap();
+    let trie = trie.delete_member(&member_id("alice-id")).unwrap();
 
     assert!(trie.has_pending_changes());
 
@@ -689,7 +914,7 @@ fn pending_changes_reflects_mutations() {
 #[test]
 fn pending_changes_idempotent() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
-    let trie = trie.insert(bob()).unwrap();
+    let trie = trie.add_member(bob()).unwrap();
 
     let pending1 = trie.pending_changes().unwrap();
     let pending2 = trie.pending_changes().unwrap();
@@ -702,8 +927,8 @@ fn pending_changes_idempotent() {
 #[test]
 fn pending_changes_matches_recalculate_delta() {
     let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
-    let trie = trie.insert(charlie()).unwrap();
-    let trie = trie.delete(&member_id("alice-id")).unwrap();
+    let trie = trie.add_member(charlie()).unwrap();
+    let trie = trie.delete_member(&member_id("alice-id")).unwrap();
 
     let preview = trie.pending_changes().unwrap();
     let (_, committed) = trie.recalculate().unwrap();
@@ -716,7 +941,7 @@ fn pending_changes_matches_recalculate_delta() {
 #[test]
 fn pending_changes_after_recalculate_is_empty() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
-    let trie = trie.insert(bob()).unwrap();
+    let trie = trie.add_member(bob()).unwrap();
     let (trie, _) = trie.recalculate().unwrap();
 
     assert!(!trie.has_pending_changes());
@@ -734,15 +959,9 @@ fn member_key_rotation_through_delta() {
     assert_eq!(trie_a.root_hash().unwrap(), trie_b.root_hash().unwrap());
 
     // Peer A rotates alice's P2pMemberKey (handle and id unchanged).
-    let rotated_alice = MemberLeaf::new(
-        member_id("alice-id"),
-        "alice",
-        member_key("alice-rotated"),
-        "Alice",
-        "Smith",
-        vec![device_key("alice-d1")])
-    .unwrap();
-    let trie_a = trie_a.update(rotated_alice.clone()).unwrap();
+    let trie_a = trie_a
+        .rotate_p2p_key(&member_id("alice-id"), member_key("alice-rotated"))
+        .unwrap();
     let (trie_a, delta) = trie_a.recalculate().unwrap();
 
     // Peer B applies the delta and verifies.
@@ -765,7 +984,7 @@ fn apply_delta_ignores_stale_removal() {
 
     // Construct a delta that removes a member who doesn't exist.
     let ghost_id = member_id("ghost-id");
-    let crafted = trie.delete(&member_id("alice-id")).unwrap();
+    let crafted = trie.delete_member(&member_id("alice-id")).unwrap();
     let (target, mut delta) = crafted.recalculate().unwrap();
 
     // Inject a stale removal of ghost-id into the delta.
@@ -796,7 +1015,7 @@ fn apply_delta_rejects_confusable_in_upsert() {
 
     // Craft an adversarial delta whose base matches `trie` but adds a confusable.
     // Start from a real delta to get the right base_root, then swap the upserts.
-    let (_, mut delta) = trie.insert(bob()).unwrap().recalculate().unwrap();
+    let (_, mut delta) = trie.add_member(bob()).unwrap().recalculate().unwrap();
     delta.removed_mut_for_test().clear();
     delta.upserted_mut_for_test().clear();
     delta.upserted_mut_for_test().push(
@@ -875,10 +1094,31 @@ fn deserialize_rejects_invalid_handle() {
 
 #[cfg(feature = "serde")]
 #[test]
-fn deserialize_rejects_empty_device_list() {
+fn deserialize_accepts_empty_device_list() {
+    // Empty device list IS valid on the wire because emergency_isolate_member
+    // produces a member with 0 devices, and that state must roundtrip through
+    // delta sync. MemberLeaf::new still requires ≥1 for normal creation.
     use postcard::{from_bytes, to_allocvec};
     let empty_devices: Vec<P2pDeviceKey> = vec![];
     let bytes = to_allocvec(&empty_devices).unwrap();
     let result: Result<org_members::types::P2pDeviceSlots, _> = from_bytes(&bytes);
-    assert!(result.is_err(), "deserialize must reject empty device list");
+    assert!(
+        result.is_ok(),
+        "deserialize must accept empty device list (for isolated members)"
+    );
+    assert_eq!(result.unwrap().device_count(), 0);
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn member_leaf_new_rejects_empty_device_list() {
+    let err = MemberLeaf::new(
+        member_id("k"),
+        "alice",
+        member_key("k"),
+        "A",
+        "B",
+        vec![],
+    );
+    assert_eq!(err.unwrap_err(), OrgMembersError::EmptyDeviceList);
 }

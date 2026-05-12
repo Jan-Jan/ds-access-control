@@ -44,8 +44,40 @@ main worktree, not always in feature worktrees).
   Rotatable. Future versions will add a separate on-chain key (`ChainKey` or
   similar -- name TBD).
 - **P2pDeviceKey** -- ed25519 VerifyingKey for a member's device. Stored sorted.
-- **P2pDeviceSlots** -- fixed depth-2 sub-trie holding up to 4 P2pDeviceKeys per
-  member.
+- **P2pDeviceSlots** -- fixed depth-2 sub-trie holding 0..4 P2pDeviceKeys per
+  member. Zero devices represents the *isolated* state (see below).
+- **Isolated member** -- a member with zero p2p devices. Reached via
+  `emergency_isolate_member` or by `delete_p2p_device` of the last device.
+  The member stays in the trie; un-isolate by adding a device back.
+
+## Public API style
+
+The MAIN API uses domain-specific operations, NOT generic CRUD:
+
+| Operation | Use case |
+|---|---|
+| `add_member(leaf)` | Onboard a new member (requires ≥1 device) |
+| `delete_member(id)` | Off-board a member entirely |
+| `update_name_surname(id, name, surname)` | PII edit |
+| `update_handle(id, new_handle)` | Rename a member |
+| `rotate_p2p_key(id, new_key)` | Routine CGKA key rotation |
+| `add_p2p_device(id, device)` | New device for an existing member |
+| `delete_p2p_device(id, device, new_key)` | Device retired or compromised. Requires `new_key` because the deleted device had access to the old key. |
+| `emergency_isolate_member(id, new_key)` | Multiple devices compromised; cut off all access at once |
+
+The generic `insert`/`update`/`delete` are crate-private helpers
+(`insert_leaf`/`update_leaf`/`delete_by_id`). Don't expose them.
+
+Domain operations:
+- All take `&MemberId` for lookup (not handles -- handles are mutable).
+- All return `Result<Self, OrgMembersError>` -- propagate errors.
+- All produce a new immutable trie via path-copying.
+- Only handle-changing operations (`add_member`, `update_handle`) touch the
+  skeleton/handle indexes. The rest skip that work.
+
+When adding a new operation: prefer a single-purpose domain method over
+extending an existing one. Test each domain operation independently in
+`tests/integration_test.rs`.
 - **Recalculate** -- the operation that walks the trie and fills lazy hash
   cells. Produces a `Delta` of accumulated changes.
 - **Delta** -- a set of changes (`removed: Vec<MemberId>`, `upserted: Vec<MemberLeaf>`)
