@@ -1,0 +1,38 @@
+[package]
+name = "org-members"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+license = "GPL-3.0-only"
+description = "Immutable binary Sparse Merkle Tree for organisation membership management"
+
+[features]
+default = ["std", "serde"]
+std = ["serde?/std", "postcard?/use-std", "blake3/std", "unicode-normalization/std", "unicode-security/std"]
+serde = ["dep:serde", "dep:postcard"]
+# Exposes `delta::test_support` mutators for integration tests. NEVER enable
+# in production. The integration test crate enables this via its dev-dependency
+# on the lib (self-referential, applied only when building tests).
+test-helpers = []
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
+postcard = { version = "1", default-features = false, features = ["alloc"], optional = true }
+thiserror = { version = "2", default-features = false }
+unicode-normalization = { version = "0.1", default-features = false }
+unicode-security = { version = "0.1", default-features = false }
+blake3 = { version = "1", default-features = false }
+ed25519-dalek = { version = "2", default-features = false, features = ["alloc"] }
+# hashbrown: HashMap that works in no_std + alloc. The `default-hasher` feature
+# enables `foldhash` (no_std-compatible, NOT `ahash` which requires std).
+hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
+# spin::Once: no_std-friendly lazy hash slot for Node. Thread-safe via spinlock.
+spin = { version = "0.9", default-features = false, features = ["once"] }
+
+[dev-dependencies]
+postcard = { version = "1", features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }
+proptest = "1"
+# Self-reference enables `test-helpers` only when building tests, not in
+# downstream production builds.
+org-members = { path = ".", features = ["test-helpers"] }
