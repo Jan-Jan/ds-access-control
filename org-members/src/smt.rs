@@ -1,6 +1,8 @@
-use std::sync::Arc;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use crate::device_trie::compute_device_root;
+use crate::error::OrgMembersError;
 use crate::hasher::TrieHasher;
 use crate::node::{Node, NodeKind};
 use crate::types::{MemberId, MemberLeaf};
@@ -93,16 +95,20 @@ fn insert_at(
     Arc::new(Node::internal(new_left, new_right))
 }
 
-/// Recursively computes hashes for all nodes with empty OnceLock.
-pub fn recalculate_hashes<H: TrieHasher>(node: &Arc<Node>) -> [u8; 32] {
+/// Recursively computes hashes for all nodes with empty OnceCell.
+/// Returns Err if an Empty node is encountered without a precomputed hash
+/// (invariant violation -- Empty nodes must always be constructed with a hash).
+pub fn recalculate_hashes<H: TrieHasher>(
+    node: &Arc<Node>,
+) -> Result<[u8; 32], OrgMembersError> {
     if let Some(h) = node.hash() {
-        return *h;
+        return Ok(*h);
     }
 
     let computed = match &node.kind {
         NodeKind::Internal { left, right } => {
-            let left_hash = recalculate_hashes::<H>(left);
-            let right_hash = recalculate_hashes::<H>(right);
+            let left_hash = recalculate_hashes::<H>(left)?;
+            let right_hash = recalculate_hashes::<H>(right)?;
             H::hash_member_node(&left_hash, &right_hash)
         }
         NodeKind::Leaf {
@@ -113,12 +119,12 @@ pub fn recalculate_hashes<H: TrieHasher>(node: &Arc<Node>) -> [u8; 32] {
             H::hash_member_leaf(&canonical)
         }
         NodeKind::Empty => {
-            panic!("Empty node without precomputed hash");
+            return Err(OrgMembersError::InvariantViolated);
         }
     };
 
-    let _ = node.set_hash(computed);
-    computed
+    node.set_hash(computed);
+    Ok(computed)
 }
 
 /// Looks up a member by id, traversing the SMT by id bits.

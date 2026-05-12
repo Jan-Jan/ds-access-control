@@ -8,19 +8,19 @@ description = "Immutable binary Sparse Merkle Tree for organisation membership m
 
 [features]
 default = ["std", "serde"]
-std = ["serde?/std", "thiserror/std", "postcard?/use-std"]
-alloc = ["postcard?/alloc"]
+std = ["serde?/std", "postcard?/use-std", "blake3/std", "unicode-normalization/std", "unicode-security/std"]
 serde = ["dep:serde", "dep:postcard"]
-wasm = []
 
 [dependencies]
-serde = { version = "1", default-features = false, features = ["derive"], optional = true }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
 postcard = { version = "1", default-features = false, features = ["alloc"], optional = true }
 thiserror = { version = "2", default-features = false }
-unicode-normalization = "0.1"
-unicode-security = "0.1"
+unicode-normalization = { version = "0.1", default-features = false }
+unicode-security = { version = "0.1", default-features = false }
 blake3 = { version = "1", default-features = false }
 ed25519-dalek = { version = "2", default-features = false, features = ["alloc"] }
+hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
+spin = { version = "0.9", default-features = false, features = ["once"] }
 
 [dev-dependencies]
 postcard = { version = "1", features = ["alloc"] }

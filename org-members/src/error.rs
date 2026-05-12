@@ -1,3 +1,5 @@
+use alloc::string::String;
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum OrgMembersError {
     #[error("duplicate handle")]
@@ -38,4 +40,7 @@ pub enum OrgMembersError {
 
     #[error("hashes not calculated")]
     HashesNotCalculated,
+
+    #[error("internal invariant violated")]
+    InvariantViolated,
 }

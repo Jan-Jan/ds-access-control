@@ -1,13 +1,17 @@
-use std::sync::{Arc, OnceLock};
+use alloc::sync::Arc;
+use core::fmt;
+
+use spin::Once;
 
 use crate::types::MemberLeaf;
 
 /// A node in the binary Sparse Merkle Tree.
 ///
-/// Hash is lazily computed via `OnceLock` -- set once during `recalculate()`,
+/// Hash is lazily computed via `spin::Once` -- set once during `recalculate()`,
 /// then immutable. `Arc` enables structural sharing between trie versions.
+/// `spin::Once` is `no_std`-compatible and thread-safe.
 pub struct Node {
-    hash: OnceLock<[u8; 32]>,
+    hash: Once<[u8; 32]>,
     pub(crate) kind: NodeKind,
 }
 
@@ -29,7 +33,7 @@ impl Node {
     /// Creates a new internal node with empty hash (to be filled by recalculate).
     pub(crate) fn internal(left: Arc<Node>, right: Arc<Node>) -> Self {
         Self {
-            hash: OnceLock::new(),
+            hash: Once::new(),
             kind: NodeKind::Internal { left, right },
         }
     }
@@ -37,7 +41,7 @@ impl Node {
     /// Creates a new leaf node with empty hash (to be filled by recalculate).
     pub(crate) fn leaf(member: MemberLeaf, device_root: [u8; 32]) -> Self {
         Self {
-            hash: OnceLock::new(),
+            hash: Once::new(),
             kind: NodeKind::Leaf {
                 member,
                 device_root,
@@ -47,8 +51,8 @@ impl Node {
 
     /// Creates an empty sentinel node with a precomputed hash.
     pub(crate) fn empty(hash: [u8; 32]) -> Self {
-        let lock = OnceLock::new();
-        let _ = lock.set(hash);
+        let lock = Once::new();
+        lock.call_once(|| hash);
         Self {
             hash: lock,
             kind: NodeKind::Empty,
@@ -60,9 +64,9 @@ impl Node {
         self.hash.get()
     }
 
-    /// Sets the hash. Returns Err if already set.
-    pub(crate) fn set_hash(&self, hash: [u8; 32]) -> Result<(), [u8; 32]> {
-        self.hash.set(hash)
+    /// Sets the hash. Subsequent calls have no effect (set-once semantics).
+    pub(crate) fn set_hash(&self, hash: [u8; 32]) {
+        self.hash.call_once(|| hash);
     }
 
     /// Returns true if the hash has been computed.
@@ -72,8 +76,8 @@ impl Node {
     }
 }
 
-impl std::fmt::Debug for Node {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
             NodeKind::Internal { .. } => {
                 write!(f, "Node::Internal(hash={:?})", self.hash.get().map(|h| &h[..4]))

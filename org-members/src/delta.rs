@@ -1,5 +1,9 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::fmt;
+
+use hashbrown::HashMap;
 
 use crate::error::OrgMembersError;
 use crate::hasher::TrieHasher;
@@ -70,8 +74,8 @@ impl<H: TrieHasher> CandidateTrie<H> {
     }
 }
 
-impl<H: TrieHasher> std::fmt::Debug for CandidateTrie<H> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<H: TrieHasher> fmt::Debug for CandidateTrie<H> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CandidateTrie")
             .field("root_hash", &self.root_hash)
             .field("member_count", &self.member_count)

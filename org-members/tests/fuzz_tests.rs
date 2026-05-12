@@ -201,10 +201,10 @@ proptest! {
         };
 
         let verified = candidate
-            .verify_against(&trie_b.root_hash())
+            .verify_against(&trie_b.root_hash().unwrap())
             .map_err(|e| TestCaseError::fail(format!("delta roundtrip verification failed: {:?}", e)))?;
 
-        prop_assert_eq!(verified.root_hash(), trie_b.root_hash());
+        prop_assert_eq!(verified.root_hash().unwrap(), trie_b.root_hash().unwrap());
         prop_assert_eq!(verified.member_count(), trie_b.member_count());
     }
 }
@@ -271,10 +271,10 @@ proptest! {
         };
 
         let verified = candidate
-            .verify_against(&trie_b.root_hash())
+            .verify_against(&trie_b.root_hash().unwrap())
             .map_err(|e| TestCaseError::fail(format!("diff roundtrip verification failed: {:?}", e)))?;
 
-        prop_assert_eq!(verified.root_hash(), trie_b.root_hash());
+        prop_assert_eq!(verified.root_hash().unwrap(), trie_b.root_hash().unwrap());
         prop_assert_eq!(verified.member_count(), trie_b.member_count());
     }
 }
@@ -305,7 +305,7 @@ proptest! {
         }
 
         let original = TestTrie::genesis(initial).unwrap();
-        let original_root = original.root_hash();
+        let original_root = original.root_hash().unwrap();
         let original_count = original.member_count();
 
         let handle = HANDLES[op_idx];
@@ -316,7 +316,7 @@ proptest! {
         let id = member_id(&format!("{}-id-0", handle));
         let _ = original.delete(&id);
 
-        prop_assert_eq!(original.root_hash(), original_root);
+        prop_assert_eq!(original.root_hash().unwrap(), original_root);
         prop_assert_eq!(original.member_count(), original_count);
     }
 }

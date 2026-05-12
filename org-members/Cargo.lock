@@ -454,9 +454,11 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "ed25519-dalek",
+ "hashbrown 0.15.5",
  "postcard",
  "proptest",
  "serde",
+ "spin",
  "thiserror",
  "unicode-normalization",
  "unicode-security",
@@ -602,6 +604,12 @@ name = "regex-syntax"
 version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
+
+[[package]]
+name = "rustc-std-workspace-std"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aba676a20abe46e5b0f1b0deae474aaaf31407e6c71147159890574599da04ef"
 
 [[package]]
 name = "rustc_version"
@@ -844,6 +852,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e4ddba1535dd35ed8b61c52166b7155d7f4e4b8847cec6f48e71dc66d8b5e50"
 dependencies = [
+ "rustc-std-workspace-std",
  "unicode-normalization",
  "unicode-script",
 ]

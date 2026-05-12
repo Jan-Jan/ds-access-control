@@ -1,3 +1,6 @@
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::fmt;
 
 use ed25519_dalek::VerifyingKey;
@@ -165,7 +168,7 @@ impl<'de> serde::Deserialize<'de> for DeviceKey {
 pub fn validate_handle(handle: &str) -> Result<String, OrgMembersError> {
     if handle.is_empty() {
         return Err(OrgMembersError::InvalidHandle(
-            "handle must not be empty".into(),
+            "handle must not be empty".to_string(),
         ));
     }
 
@@ -174,12 +177,12 @@ pub fn validate_handle(handle: &str) -> Result<String, OrgMembersError> {
     for ch in normalized.chars() {
         if ch.is_uppercase() {
             return Err(OrgMembersError::InvalidHandle(
-                "handle must be lowercase".into(),
+                "handle must be lowercase".to_string(),
             ));
         }
         if ch == '.' {
             return Err(OrgMembersError::InvalidHandle(
-                "handle must not contain '.'".into(),
+                "handle must not contain '.'".to_string(),
             ));
         }
         if ch == '-' {
@@ -195,7 +198,7 @@ pub fn validate_handle(handle: &str) -> Result<String, OrgMembersError> {
 
     if !normalized.is_single_script() {
         return Err(OrgMembersError::InvalidHandle(
-            "handle must not mix scripts".into(),
+            "handle must not mix scripts".to_string(),
         ));
     }
 

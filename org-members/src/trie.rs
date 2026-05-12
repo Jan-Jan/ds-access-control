@@ -1,5 +1,10 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::fmt;
+
+use hashbrown::HashMap;
 
 use crate::delta::{CandidateTrie, Delta};
 use crate::error::OrgMembersError;
@@ -62,7 +67,7 @@ impl<H: TrieHasher> OrgTrie<H> {
             count += 1;
         }
 
-        let root_hash = smt::recalculate_hashes::<H>(&root);
+        let root_hash = smt::recalculate_hashes::<H>(&root)?;
 
         Ok(Self {
             root: root.clone(),
@@ -76,9 +81,10 @@ impl<H: TrieHasher> OrgTrie<H> {
         })
     }
 
-    pub fn root_hash(&self) -> RootHash {
-        self.cached_root_hash
-            .expect("root_hash() called before recalculate()")
+    /// Returns the root hash. Returns `Err(HashesNotCalculated)` if there are
+    /// pending mutations -- call `recalculate()` first.
+    pub fn root_hash(&self) -> Result<RootHash, OrgMembersError> {
+        self.cached_root_hash.ok_or(OrgMembersError::HashesNotCalculated)
     }
 
     pub fn is_calculated(&self) -> bool {
@@ -248,7 +254,7 @@ impl<H: TrieHasher> OrgTrie<H> {
     /// Returns the trie (now fully hashed) and a delta of all pending changes.
     pub fn recalculate(&self) -> Result<(Self, Delta), OrgMembersError> {
         let delta = self.pending_changes();
-        let root_hash = smt::recalculate_hashes::<H>(&self.root);
+        let root_hash = smt::recalculate_hashes::<H>(&self.root)?;
 
         Ok((
             Self {
@@ -329,7 +335,7 @@ impl<H: TrieHasher> OrgTrie<H> {
             }
         }
 
-        let root_hash = smt::recalculate_hashes::<H>(&root);
+        let root_hash = smt::recalculate_hashes::<H>(&root)?;
 
         Ok(CandidateTrie {
             root,
@@ -352,7 +358,7 @@ impl<H: TrieHasher> OrgTrie<H> {
         let (removed, upserted) = smt::diff_tries(&old.root, &self.root);
 
         Ok(Delta {
-            base_root: old.root_hash(),
+            base_root: old.root_hash()?,
             removed,
             upserted,
         })
@@ -395,8 +401,8 @@ impl<H: TrieHasher> Clone for OrgTrie<H> {
     }
 }
 
-impl<H: TrieHasher> std::fmt::Debug for OrgTrie<H> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<H: TrieHasher> fmt::Debug for OrgTrie<H> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OrgTrie")
             .field("member_count", &self.member_count)
             .field("root_hash", &self.cached_root_hash)

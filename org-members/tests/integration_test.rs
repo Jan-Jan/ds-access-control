@@ -188,7 +188,7 @@ fn insert_duplicate_handle_different_id_fails() {
 #[test]
 fn update_existing_member() {
     let trie = TestTrie::genesis(vec![alice()]).unwrap();
-    let root_before = trie.root_hash();
+    let root_before = trie.root_hash().unwrap();
 
     // Update alice with new key, surname, device (same id, same handle)
     let updated = MemberLeaf::new(
@@ -208,7 +208,7 @@ fn update_existing_member() {
     let member = trie.get(&member_id("alice-id")).unwrap();
     assert_eq!(member.surname(), "Wonderland");
     assert_eq!(member.key(), &member_key("alice-rotated-mk"));
-    assert_ne!(trie.root_hash(), root_before);
+    assert_ne!(trie.root_hash().unwrap(), root_before);
 }
 
 #[test]
@@ -265,22 +265,22 @@ fn delete_nonexistent_fails() {
 #[test]
 fn insert_does_not_mutate_original() {
     let original = TestTrie::genesis(vec![alice()]).unwrap();
-    let original_root = original.root_hash();
+    let original_root = original.root_hash().unwrap();
     let _modified = original.insert(bob()).unwrap();
 
     assert_eq!(original.member_count(), 1);
-    assert_eq!(original.root_hash(), original_root);
+    assert_eq!(original.root_hash().unwrap(), original_root);
     assert!(!original.contains_handle("bob"));
 }
 
 #[test]
 fn delete_does_not_mutate_original() {
     let original = TestTrie::genesis(vec![alice(), bob()]).unwrap();
-    let original_root = original.root_hash();
+    let original_root = original.root_hash().unwrap();
     let _modified = original.delete(&member_id("alice-id")).unwrap();
 
     assert_eq!(original.member_count(), 2);
-    assert_eq!(original.root_hash(), original_root);
+    assert_eq!(original.root_hash().unwrap(), original_root);
     assert!(original.contains_handle("alice"));
 }
 
@@ -295,9 +295,9 @@ fn delta_apply_and_verify() {
     let (updated, delta) = updated.recalculate().unwrap();
 
     let candidate = trie.apply_delta(&delta).unwrap();
-    let verified = candidate.verify_against(&updated.root_hash()).unwrap();
+    let verified = candidate.verify_against(&updated.root_hash().unwrap()).unwrap();
 
-    assert_eq!(verified.root_hash(), updated.root_hash());
+    assert_eq!(verified.root_hash().unwrap(), updated.root_hash().unwrap());
     assert_eq!(verified.member_count(), 2);
     assert!(!verified.contains_handle("alice"));
     assert!(verified.contains_handle("bob"));
@@ -341,9 +341,9 @@ fn diff_produces_valid_delta() {
     let catchup_delta = current.diff_from(&old_trie).unwrap();
 
     let candidate = old_trie.apply_delta(&catchup_delta).unwrap();
-    let verified = candidate.verify_against(&current.root_hash()).unwrap();
+    let verified = candidate.verify_against(&current.root_hash().unwrap()).unwrap();
 
-    assert_eq!(verified.root_hash(), current.root_hash());
+    assert_eq!(verified.root_hash().unwrap(), current.root_hash().unwrap());
 }
 
 // --- Members iteration ---
@@ -528,14 +528,14 @@ fn member_leaf_has_id_handle_and_key() {
 fn same_members_same_root_hash() {
     let trie1 = TestTrie::genesis(vec![alice(), bob(), charlie()]).unwrap();
     let trie2 = TestTrie::genesis(vec![alice(), bob(), charlie()]).unwrap();
-    assert_eq!(trie1.root_hash(), trie2.root_hash());
+    assert_eq!(trie1.root_hash().unwrap(), trie2.root_hash().unwrap());
 }
 
 #[test]
 fn different_insertion_order_same_root() {
     let trie_abc = TestTrie::genesis(vec![alice(), bob(), charlie()]).unwrap();
     let trie_cba = TestTrie::genesis(vec![charlie(), bob(), alice()]).unwrap();
-    assert_eq!(trie_abc.root_hash(), trie_cba.root_hash());
+    assert_eq!(trie_abc.root_hash().unwrap(), trie_cba.root_hash().unwrap());
 }
 
 // --- Multiple mutations before recalculate ---
@@ -632,7 +632,7 @@ fn pending_changes_reflects_mutations() {
     assert_eq!(pending.upserted().len(), 2);
     assert_eq!(
         pending.base_root(),
-        &TestTrie::genesis(vec![alice(), bob()]).unwrap().root_hash()
+        &TestTrie::genesis(vec![alice(), bob()]).unwrap().root_hash().unwrap()
     );
 }
 
