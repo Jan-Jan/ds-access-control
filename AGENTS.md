@@ -7,8 +7,9 @@ Guidance for future agent sessions working on this codebase. Terse on purpose.
 Two-tier blockchain-mediated access control for local-first collaboration.
 Phase 1.a is the `org-members` Rust library: an immutable binary Sparse Merkle
 Tree (SMT) for organisation membership. Phase 1.a is `no_std`/WASM-compilable
-and depends only on `alloc`. Downstream CGKA layer (Keyhive/BeeKEM) consumes
-this lib's types but is out of scope here.
+and depends only on `alloc`. The local-first collaboration layer consumes
+this lib's types (using the `p2p_key` as the member-as-a-group key when
+granting access) but is out of scope here.
 
 Design doc (canonical): `docs/plans/2026-05-07-org-members-design.md` (in
 main worktree, not always in feature worktrees).
@@ -40,9 +41,11 @@ main worktree, not always in feature worktrees).
   PII; redacted in Debug.
 - **MemberId** -- 32-byte immutable identifier; SMT key. Caller-generated,
   effectively random.
-- **P2pMemberKey** -- ed25519 VerifyingKey for peer-to-peer use (CGKA / Keyhive).
-  Rotatable. Future versions will add a separate on-chain key (`ChainKey` or
-  similar -- name TBD).
+- **P2pMemberKey** -- ed25519 VerifyingKey for peer-to-peer use. Used by the
+  local-first software as the "member-as-a-group" key: when an Organisation
+  grants access to a member, the grant is encoded against this key, and
+  member's devices derive their access from it. Rotatable. Future versions
+  will add a separate on-chain key (`ChainKey` or similar -- name TBD).
 - **P2pDeviceKey** -- ed25519 VerifyingKey for a member's device. Stored sorted.
 - **P2pDeviceSlots** -- fixed depth-2 sub-trie holding 0..4 P2pDeviceKeys per
   member. Zero devices represents the *isolated* state (see below).
@@ -60,7 +63,7 @@ The MAIN API uses domain-specific operations, NOT generic CRUD:
 | `delete_member(id)` | Off-board a member entirely |
 | `update_name_surname(id, name, surname)` | PII edit |
 | `update_handle(id, new_handle)` | Rename a member |
-| `rotate_p2p_key(id, new_key)` | Routine CGKA key rotation |
+| `rotate_p2p_key(id, new_key)` | Routine rotation of the member-as-a-group key |
 | `add_p2p_device(id, device)` | New device for an existing member |
 | `delete_p2p_device(id, device, new_key)` | Device retired or compromised. Requires `new_key` because the deleted device had access to the old key. |
 | `emergency_isolate_member(id, new_key)` | Multiple devices compromised; cut off all access at once |
@@ -87,12 +90,13 @@ extending an existing one. Test each domain operation independently in
 - **Skeleton** -- UTS#39 canonical form for confusable detection. Two handles
   with the same skeleton are rejected as homoglyphs.
 
-Do NOT introduce: "user", "account", "node id" (ambiguous), "group" (means
-something specific in CGKA but not here).
+Do NOT introduce: "user", "account", "node id" (ambiguous), or naked "group"
+(use "member-as-a-group" if you mean the principal that a `p2p_key` represents).
 
 ## Critical invariants (verified by tests)
 
-1. SMT key is the `MemberId` -- handle and key (CGKA) are independent.
+1. SMT key is the `MemberId` -- handle and `p2p_key` are independent of it
+   and of each other.
 2. After `insert`/`update`/`delete`, hashes are NOT computed. `recalculate()`
    fills them. `root_hash()` returns `Err(HashesNotCalculated)` until then.
 3. Path-copying preserves immutability: old trie's `root_hash()` is unchanged

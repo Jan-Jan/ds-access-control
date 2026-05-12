@@ -177,8 +177,9 @@ impl<H: TrieHasher> OrgTrie<H> {
         self.update_leaf(new_leaf)
     }
 
-    /// Rotates a member's peer-to-peer key (CGKA / Keyhive key).
-    /// All other fields, including device set, are unchanged.
+    /// Rotates a member's peer-to-peer key -- the "member-as-a-group" key
+    /// the local-first software uses to identify the member when granting
+    /// access. All other fields, including device set, are unchanged.
     pub fn rotate_p2p_key(
         &self,
         id: &MemberId,
@@ -206,9 +207,10 @@ impl<H: TrieHasher> OrgTrie<H> {
 
     /// Deletes a peer-to-peer device key from a member AND rotates the
     /// member's p2p_key. Both are required: the deleted device had access to
-    /// the old p2p_key (which is the CGKA group key shared with the member),
-    /// so rotating the key invalidates that access. If the deleted device was
-    /// the last one, the member becomes isolated (zero devices).
+    /// the old p2p_key (the member-as-a-group key in the local-first software,
+    /// which the device derived secrets from), so rotating it invalidates
+    /// that access. If the deleted device was the last one, the member
+    /// becomes isolated (zero devices).
     pub fn delete_p2p_device(
         &self,
         id: &MemberId,

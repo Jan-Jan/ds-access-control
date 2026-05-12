@@ -15,7 +15,7 @@ use crate::normalize::to_nfc;
 pub const MAX_DEVICES: usize = 4;
 
 /// Immutable member identifier. Used as the SMT key and as a stable reference
-/// to a member regardless of changes to their handle or CGKA key.
+/// to a member regardless of changes to their handle or p2p key.
 ///
 /// The 32 bytes are opaque -- the caller is responsible for generating unique,
 /// immutable values (e.g., random bytes, or a hash of a stable input).
@@ -54,9 +54,12 @@ impl fmt::Debug for MemberId {
     }
 }
 
-/// A member's ed25519 public key, used for CGKA (Continuous Group Key Agreement)
-/// by the local-first collaboration layer. Can change over time (e.g., upon
-/// device rotation or key compromise) -- distinct from the immutable `MemberId`.
+/// A member's ed25519 public key. In the local-first collaboration layer this
+/// represents the member as a single principal (the "member-as-a-group" key):
+/// when an Organisation grants access to a member, that grant is encoded
+/// against this key, and the member's devices share access derived from it.
+/// Can change over time (e.g., upon device rotation or compromise) -- distinct
+/// from the immutable `MemberId`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct P2pMemberKey(VerifyingKey);
 
@@ -347,8 +350,9 @@ pub struct MemberLeaf {
     id: MemberId,
     /// Validated, NFC-normalized handle string (PII). Can change rarely.
     handle: String,
-    /// The member's peer-to-peer (CGKA / Keyhive) key. Can change over time.
-    /// Future versions may also add an on-chain key.
+    /// The member's peer-to-peer key -- the "member-as-a-group" key used by
+    /// the local-first software to grant access at the member level. Can
+    /// change over time. Future versions may also add an on-chain key.
     p2p_key: P2pMemberKey,
     name: String,
     surname: String,
