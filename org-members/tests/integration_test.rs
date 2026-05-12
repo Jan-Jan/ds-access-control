@@ -600,6 +600,84 @@ fn calculate_delta_fails_when_hashes_not_calculated() {
     assert_eq!(err.unwrap_err(), OrgMembersError::HashesNotCalculated);
 }
 
+#[test]
+fn calculate_delta_reversed_args_produces_inverse_delta() {
+    // The convention is `new.calculate_delta(&old)`. If a caller flips the
+    // arguments, they get the INVERSE delta (one that undoes the changes).
+    // The base_root in each delta unambiguously identifies which trie it
+    // applies to, so misapplication is always caught at apply time.
+    let v1 = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    let v2 = v1.add_member(charlie()).unwrap();
+    let (v2, _) = v2.recalculate().unwrap();
+
+    let forward = v2.calculate_delta(&v1).unwrap();
+    let inverse = v1.calculate_delta(&v2).unwrap();
+
+    // Forward: base = v1, adds charlie
+    assert_eq!(forward.base_root(), &v1.root_hash().unwrap());
+    assert_eq!(forward.removed().len(), 0);
+    assert_eq!(forward.upserted().len(), 1);
+    assert_eq!(forward.upserted()[0].id(), &member_id("charlie-id"));
+
+    // Inverse: base = v2, removes charlie
+    assert_eq!(inverse.base_root(), &v2.root_hash().unwrap());
+    assert_eq!(inverse.removed().len(), 1);
+    assert_eq!(inverse.removed()[0], member_id("charlie-id"));
+    assert_eq!(inverse.upserted().len(), 0);
+
+    // Forward applied to v1 yields v2.
+    let cand = v1.apply_delta(&forward).unwrap();
+    let after = cand.verify_against(&v2.root_hash().unwrap()).unwrap();
+    assert_eq!(after.root_hash().unwrap(), v2.root_hash().unwrap());
+
+    // Inverse applied to v2 yields v1 (round-trips back).
+    let cand = v2.apply_delta(&inverse).unwrap();
+    let back = cand.verify_against(&v1.root_hash().unwrap()).unwrap();
+    assert_eq!(back.root_hash().unwrap(), v1.root_hash().unwrap());
+}
+
+#[test]
+fn apply_delta_to_wrong_side_after_reversed_calc_fails() {
+    // Following on from the reversed-args test: applying the forward delta to
+    // v2 (the wrong side) and applying the inverse delta to v1 (the wrong
+    // side) both fail with DeltaBaseMismatch -- the base_root catches the
+    // user error.
+    let v1 = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    let v2 = v1.add_member(charlie()).unwrap();
+    let (v2, _) = v2.recalculate().unwrap();
+
+    let forward = v2.calculate_delta(&v1).unwrap(); // intended for v1
+    let inverse = v1.calculate_delta(&v2).unwrap(); // intended for v2
+
+    // forward applied to v2: forward.base_root = v1.root, v2.root != v1.root -> mismatch
+    let err = v2.apply_delta(&forward);
+    assert_eq!(err.unwrap_err(), OrgMembersError::DeltaBaseMismatch);
+
+    // inverse applied to v1: inverse.base_root = v2.root, v1.root != v2.root -> mismatch
+    let err = v1.apply_delta(&inverse);
+    assert_eq!(err.unwrap_err(), OrgMembersError::DeltaBaseMismatch);
+}
+
+#[test]
+fn apply_delta_stale_delta_fails() {
+    // Realistic scenario: trie evolves v1 -> v2 -> v3. A delta computed for
+    // v1 -> v2 should NOT apply to v3 (the receiver already moved past it).
+    // base_root of the delta == v1's root, but v3.root_hash() != v1.root_hash().
+    let v1 = TestTrie::genesis(vec![alice()]).unwrap();
+    let v2 = v1.add_member(bob()).unwrap();
+    let (v2, delta_v1_to_v2) = v2.recalculate().unwrap();
+
+    let v3 = v2.add_member(charlie()).unwrap();
+    let (v3, _) = v3.recalculate().unwrap();
+
+    // Sanity: v1 → v2 delta has base_root = v1.root_hash()
+    assert_eq!(delta_v1_to_v2.base_root(), &v1.root_hash().unwrap());
+
+    // Applying the v1→v2 delta to v3 must fail (stale: v3 has moved past v2)
+    let err = v3.apply_delta(&delta_v1_to_v2);
+    assert_eq!(err.unwrap_err(), OrgMembersError::DeltaBaseMismatch);
+}
+
 // --- Members iteration ---
 
 #[test]
