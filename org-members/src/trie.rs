@@ -16,10 +16,22 @@ use crate::types::{handle_skeleton, MemberId, MemberLeaf, RootHash};
 /// An immutable binary Sparse Merkle Tree for organisation membership.
 ///
 /// Mutations (`insert`, `update`, `delete`) return a new trie via path-copying
-/// with lazy hash computation (`OnceLock`). Call `recalculate()` to fill all
-/// pending hashes.
+/// with lazy hash computation. Call `recalculate()` to fill all pending hashes.
 ///
 /// Maintains a skeleton index for UTS#39 confusable/homoglyph detection.
+///
+/// # Performance note
+///
+/// `skeleton_index` and `handle_index` are full `HashMap`s cloned on every
+/// mutation -- O(N) memory per mutation regardless of how few members changed.
+/// At 1000 members that's ~150KB allocation churn per `insert`/`update`/`delete`.
+/// Fine at the design's target scale (1000 members, 1% monthly turnover) but
+/// undoes the path-copying optimization for larger orgs.
+///
+/// Future optimization: wrap indexes in `Arc<Indexes>` shared across path-copies,
+/// only rebuilt at `recalculate()`. For uncommitted mutations, find pending
+/// leaves by walking the trie under unhashed nodes (subtrees whose root has an
+/// unset `Once` cell). See discussion in the org-members worktree history.
 pub struct OrgTrie<H: TrieHasher> {
     root: Arc<Node>,
     defaults: Arc<DefaultHashes>,
