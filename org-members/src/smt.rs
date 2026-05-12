@@ -5,7 +5,7 @@ use crate::device_trie::compute_device_root;
 use crate::error::OrgMembersError;
 use crate::hasher::TrieHasher;
 use crate::node::{Node, NodeKind};
-use crate::types::{MemberId, MemberLeaf};
+use crate::types::{MemberId, MemberLeaf, NodeHash};
 
 /// Depth of the Sparse Merkle Tree (256 bits = 256 levels).
 pub const SMT_DEPTH: u16 = 256;
@@ -14,7 +14,7 @@ const MEMBER_EMPTY_SENTINEL: &[u8] = b"EMPTY_SENTINEL_ORG_MEMBERS_V1";
 
 /// Precomputed default hashes for each level of the SMT.
 pub struct DefaultHashes {
-    hashes: Vec<[u8; 32]>,
+    hashes: Vec<NodeHash>,
 }
 
 impl DefaultHashes {
@@ -30,11 +30,11 @@ impl DefaultHashes {
         Self { hashes }
     }
 
-    pub fn at_level(&self, level: u16) -> &[u8; 32] {
+    pub fn at_level(&self, level: u16) -> &NodeHash {
         &self.hashes[level as usize]
     }
 
-    pub fn empty_leaf(&self) -> &[u8; 32] {
+    pub fn empty_leaf(&self) -> &NodeHash {
         &self.hashes[0]
     }
 }
@@ -80,7 +80,7 @@ fn insert_at(
 
     let (left, right) = match &node.kind {
         NodeKind::Internal { left, right } => (left.clone(), right.clone()),
-        NodeKind::Empty | NodeKind::Leaf { .. } => {
+        NodeKind::Empty | NodeKind::Leaf(_) => {
             let default_child = Arc::new(Node::empty(*defaults.at_level(SMT_DEPTH - depth - 1)));
             (default_child.clone(), default_child)
         }
@@ -100,7 +100,7 @@ fn insert_at(
 /// (invariant violation -- Empty nodes must always be constructed with a hash).
 pub fn recalculate_hashes<H: TrieHasher>(
     node: &Arc<Node>,
-) -> Result<[u8; 32], OrgMembersError> {
+) -> Result<NodeHash, OrgMembersError> {
     if let Some(h) = node.hash() {
         return Ok(*h);
     }
@@ -111,11 +111,8 @@ pub fn recalculate_hashes<H: TrieHasher>(
             let right_hash = recalculate_hashes::<H>(right)?;
             H::hash_member_node(&left_hash, &right_hash)
         }
-        NodeKind::Leaf {
-            member,
-            device_root,
-        } => {
-            let canonical = member.canonical_bytes(device_root);
+        NodeKind::Leaf(payload) => {
+            let canonical = payload.member.canonical_bytes(&payload.device_root);
             H::hash_member_leaf(&canonical)
         }
         NodeKind::Empty => {
@@ -140,11 +137,11 @@ pub fn get_member(root: &Arc<Node>, id: &MemberId) -> Option<MemberLeaf> {
                 };
             }
             NodeKind::Empty => return None,
-            NodeKind::Leaf { .. } => return None,
+            NodeKind::Leaf(_) => return None,
         }
     }
     match &current.kind {
-        NodeKind::Leaf { member, .. } => Some(member.clone()),
+        NodeKind::Leaf(payload) => Some(payload.member.clone()),
         _ => None,
     }
 }
@@ -162,8 +159,8 @@ fn collect_members_recursive(node: &Arc<Node>, members: &mut Vec<MemberLeaf>) {
             collect_members_recursive(left, members);
             collect_members_recursive(right, members);
         }
-        NodeKind::Leaf { member, .. } => {
-            members.push(member.clone());
+        NodeKind::Leaf(payload) => {
+            members.push(payload.member.clone());
         }
         NodeKind::Empty => {}
     }
@@ -207,16 +204,16 @@ fn diff_recursive(
             diff_recursive(ol, nl, removed, upserted);
             diff_recursive(or, nr, removed, upserted);
         }
-        (NodeKind::Leaf { member: old_m, .. }, NodeKind::Leaf { member: new_m, .. }) => {
-            if old_m != new_m {
-                upserted.push(new_m.clone());
+        (NodeKind::Leaf(old_p), NodeKind::Leaf(new_p)) => {
+            if old_p.member != new_p.member {
+                upserted.push(new_p.member.clone());
             }
         }
-        (NodeKind::Leaf { member, .. }, NodeKind::Empty) => {
-            removed.push(*member.id());
+        (NodeKind::Leaf(payload), NodeKind::Empty) => {
+            removed.push(*payload.member.id());
         }
-        (NodeKind::Empty, NodeKind::Leaf { member, .. }) => {
-            upserted.push(member.clone());
+        (NodeKind::Empty, NodeKind::Leaf(payload)) => {
+            upserted.push(payload.member.clone());
         }
         (NodeKind::Empty, NodeKind::Empty) => {}
         (NodeKind::Internal { left, right }, _) => {

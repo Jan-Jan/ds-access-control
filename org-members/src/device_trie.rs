@@ -1,5 +1,5 @@
 use crate::hasher::TrieHasher;
-use crate::types::P2pDeviceSlots;
+use crate::types::{NodeHash, P2pDeviceSlots};
 
 const DEVICE_EMPTY_SENTINEL: &[u8] = b"EMPTY_SENTINEL_ORG_MEMBERS_DEVICE_V1";
 
@@ -7,7 +7,7 @@ const DEVICE_EMPTY_SENTINEL: &[u8] = b"EMPTY_SENTINEL_ORG_MEMBERS_DEVICE_V1";
 ///
 /// The sub-trie has 4 leaf slots (matching P2pDeviceSlots).
 /// Empty slots use the device empty sentinel hash.
-pub fn compute_device_root<H: TrieHasher>(devices: &P2pDeviceSlots) -> [u8; 32] {
+pub(crate) fn compute_device_root<H: TrieHasher>(devices: &P2pDeviceSlots) -> NodeHash {
     let slots = devices.to_fixed_slots();
     let empty_leaf = device_empty_leaf_hash::<H>();
 
@@ -26,6 +26,6 @@ pub fn compute_device_root<H: TrieHasher>(devices: &P2pDeviceSlots) -> [u8; 32] 
 }
 
 /// Returns the device empty leaf sentinel hash.
-pub fn device_empty_leaf_hash<H: TrieHasher>() -> [u8; 32] {
+pub(crate) fn device_empty_leaf_hash<H: TrieHasher>() -> NodeHash {
     H::hash_device_leaf(DEVICE_EMPTY_SENTINEL)
 }

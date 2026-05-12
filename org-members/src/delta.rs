@@ -38,18 +38,23 @@ impl Delta {
     pub fn is_empty(&self) -> bool {
         self.removed.is_empty() && self.upserted.is_empty()
     }
+}
 
-    /// Test-only mutator for the `removed` list. Used to construct adversarial
-    /// deltas (e.g., stale or duplicate removals) for security testing.
-    #[doc(hidden)]
-    pub fn removed_mut_for_test(&mut self) -> &mut Vec<MemberId> {
-        &mut self.removed
+/// Internal helpers for integration tests that need to construct adversarial
+/// deltas (e.g., stale or duplicate removals, confusable upserts) without
+/// going through `recalculate()`. Gated behind the `test-helpers` feature so
+/// production builds cannot reach these mutators.
+#[cfg(feature = "test-helpers")]
+#[doc(hidden)]
+pub mod test_support {
+    use super::*;
+
+    pub fn delta_set_removed(delta: &mut Delta, ids: Vec<MemberId>) {
+        delta.removed = ids;
     }
 
-    /// Test-only mutator for the `upserted` list.
-    #[doc(hidden)]
-    pub fn upserted_mut_for_test(&mut self) -> &mut Vec<MemberLeaf> {
-        &mut self.upserted
+    pub fn delta_set_upserted(delta: &mut Delta, leaves: Vec<MemberLeaf>) {
+        delta.upserted = leaves;
     }
 }
 

@@ -48,15 +48,12 @@ fn make_member(handle: &str, variant: u8) -> Option<MemberLeaf> {
 proptest! {
     #[test]
     fn handle_validation_never_panics(s in "\\PC{0,64}") {
-        match validate_handle(&s) {
-            Ok(normalized) => {
-                prop_assert!(!normalized.is_empty());
-                for ch in normalized.chars() {
-                    prop_assert!(!ch.is_uppercase(), "validated handle contains uppercase: {:?}", ch);
-                }
-                prop_assert!(!normalized.contains('.'), "validated handle contains '.'");
+        if let Ok(normalized) = validate_handle(&s) {
+            prop_assert!(!normalized.is_empty());
+            for ch in normalized.chars() {
+                prop_assert!(!ch.is_uppercase(), "validated handle contains uppercase: {:?}", ch);
             }
-            Err(_) => {}
+            prop_assert!(!normalized.contains('.'), "validated handle contains '.'");
         }
     }
 }

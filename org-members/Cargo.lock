@@ -455,6 +455,7 @@ dependencies = [
  "blake3",
  "ed25519-dalek",
  "hashbrown 0.15.5",
+ "org-members",
  "postcard",
  "proptest",
  "serde",

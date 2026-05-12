@@ -19,8 +19,10 @@ use crate::types::{
 
 /// An immutable binary Sparse Merkle Tree for organisation membership.
 ///
-/// Mutations (`insert`, `update`, `delete`) return a new trie via path-copying
-/// with lazy hash computation. Call `recalculate()` to fill all pending hashes.
+/// Mutations (`add_member`, `delete_member`, `update_handle`, `rotate_p2p_key`,
+/// `add_p2p_device`, `delete_p2p_device`, `emergency_isolate_member`,
+/// `update_name_surname`) return a new trie via path-copying with lazy hash
+/// computation. Call `recalculate()` to fill all pending hashes.
 ///
 /// Maintains a skeleton index for UTS#39 confusable/homoglyph detection.
 ///
@@ -28,9 +30,9 @@ use crate::types::{
 ///
 /// `skeleton_index` and `handle_index` are full `HashMap`s cloned on every
 /// mutation -- O(N) memory per mutation regardless of how few members changed.
-/// At 1000 members that's ~150KB allocation churn per `insert`/`update`/`delete`.
-/// Fine at the design's target scale (1000 members, 1% monthly turnover) but
-/// undoes the path-copying optimization for larger orgs.
+/// At 1000 members that's ~150KB allocation churn per mutation. Fine at the
+/// design's target scale (1000 members, 1% monthly turnover) but undoes the
+/// path-copying optimization for larger orgs.
 ///
 /// Future optimization: wrap indexes in `Arc<Indexes>` shared across path-copies,
 /// only rebuilt at `recalculate()`. For uncommitted mutations, find pending
@@ -41,7 +43,10 @@ pub struct OrgTrie<H: TrieHasher> {
     defaults: Arc<DefaultHashes>,
     member_count: usize,
     cached_root_hash: Option<RootHash>,
-    last_calculated_root: Option<Arc<Node>>,
+    /// The trie root at the time of the last `recalculate()` (or `genesis()`).
+    /// Always populated -- every constructor sets it, and mutations propagate
+    /// it forward unchanged. Used as the diff base for `pending_changes()`.
+    last_calculated_root: Arc<Node>,
     /// Maps skeleton → handle string for confusable detection.
     skeleton_index: HashMap<String, String>,
     /// Maps handle → MemberId for handle-based lookups.
@@ -89,8 +94,8 @@ impl<H: TrieHasher> OrgTrie<H> {
             root: root.clone(),
             defaults,
             member_count: count,
-            cached_root_hash: Some(RootHash(root_hash)),
-            last_calculated_root: Some(root),
+            cached_root_hash: Some(root_hash.into()),
+            last_calculated_root: root,
             skeleton_index,
             handle_index,
             _hasher: core::marker::PhantomData,
@@ -348,26 +353,21 @@ impl<H: TrieHasher> OrgTrie<H> {
     ///
     /// Returns an empty delta if no changes are pending.
     /// Returns `Err(InvariantViolated)` if the internal `last_calculated_root`
-    /// invariant is broken (its hash should always be populated when present).
+    /// invariant is broken (its hash must always be populated).
     pub fn pending_changes(&self) -> Result<Delta, OrgMembersError> {
-        if let Some(ref old_root) = self.last_calculated_root {
-            let (removed, upserted) = smt::diff_tries(old_root, &self.root);
-            // Invariant: last_calculated_root is only ever set immediately
-            // after recalculate_hashes has populated its Once cell.
-            let base_root_bytes = old_root.hash().ok_or(OrgMembersError::InvariantViolated)?;
-            Ok(Delta {
-                base_root: RootHash(*base_root_bytes),
-                removed,
-                upserted,
-            })
-        } else {
-            let members = smt::collect_members(&self.root);
-            Ok(Delta {
-                base_root: RootHash(*self.defaults.at_level(crate::smt::SMT_DEPTH)),
-                removed: Vec::new(),
-                upserted: members,
-            })
-        }
+        let (removed, upserted) = smt::diff_tries(&self.last_calculated_root, &self.root);
+        // Invariant: last_calculated_root's hash is always populated -- every
+        // constructor sets it via genesis(), recalculate(), or from_candidate(),
+        // and mutations propagate it unchanged.
+        let base_hash = self
+            .last_calculated_root
+            .hash()
+            .ok_or(OrgMembersError::InvariantViolated)?;
+        Ok(Delta {
+            base_root: (*base_hash).into(),
+            removed,
+            upserted,
+        })
     }
 
     /// Returns true if there are uncommitted mutations since the last `recalculate()`.
@@ -386,8 +386,8 @@ impl<H: TrieHasher> OrgTrie<H> {
                 root: self.root.clone(),
                 defaults: self.defaults.clone(),
                 member_count: self.member_count,
-                cached_root_hash: Some(RootHash(root_hash)),
-                last_calculated_root: Some(self.root.clone()),
+                cached_root_hash: Some(root_hash.into()),
+                last_calculated_root: self.root.clone(),
                 skeleton_index: self.skeleton_index.clone(),
                 handle_index: self.handle_index.clone(),
                 _hasher: core::marker::PhantomData,
@@ -466,7 +466,7 @@ impl<H: TrieHasher> OrgTrie<H> {
             root,
             defaults: self.defaults.clone(),
             member_count: count,
-            root_hash: RootHash(root_hash),
+            root_hash: root_hash.into(),
             skeleton_index: new_skeleton_index,
             handle_index: new_handle_index,
             _hasher: core::marker::PhantomData,
@@ -501,7 +501,7 @@ impl<H: TrieHasher> OrgTrie<H> {
             defaults,
             member_count,
             cached_root_hash: Some(root_hash),
-            last_calculated_root: Some(root),
+            last_calculated_root: root,
             skeleton_index,
             handle_index,
             _hasher: core::marker::PhantomData,

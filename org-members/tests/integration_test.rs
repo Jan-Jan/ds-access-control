@@ -1105,7 +1105,9 @@ fn apply_delta_ignores_stale_removal() {
     let (target, mut delta) = crafted.recalculate().unwrap();
 
     // Inject a stale removal of ghost-id into the delta.
-    delta.removed_mut_for_test().push(ghost_id);
+    let mut new_removed = delta.removed().to_vec();
+    new_removed.push(ghost_id);
+    org_members::delta::test_support::delta_set_removed(&mut delta, new_removed);
 
     // apply_delta must not underflow member_count, and the resulting candidate
     // must verify against the target trie (which doesn't include ghost-id).
@@ -1133,17 +1135,18 @@ fn apply_delta_rejects_confusable_in_upsert() {
     // Craft an adversarial delta whose base matches `trie` but adds a confusable.
     // Start from a real delta to get the right base_root, then swap the upserts.
     let (_, mut delta) = trie.add_member(bob()).unwrap().recalculate().unwrap();
-    delta.removed_mut_for_test().clear();
-    delta.upserted_mut_for_test().clear();
-    delta.upserted_mut_for_test().push(
-        MemberLeaf::new(
+    org_members::delta::test_support::delta_set_removed(&mut delta, Vec::new());
+    org_members::delta::test_support::delta_set_upserted(
+        &mut delta,
+        vec![MemberLeaf::new(
             member_id("k2"),
             &h2,
             member_key("k2"),
             "A",
             "B",
-            vec![device_key("d2")])
-        .unwrap(),
+            vec![device_key("d2")],
+        )
+        .unwrap()],
     );
 
     let err = trie.apply_delta(&delta).unwrap_err();

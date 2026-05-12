@@ -14,6 +14,12 @@ use crate::normalize::to_nfc;
 /// Maximum number of devices per member.
 pub const MAX_DEVICES: usize = 4;
 
+/// Maximum byte length of a handle (after NFC normalization). Caps memory
+/// exposure from adversarial wire-format inputs. Email local-parts are
+/// limited to 64 octets by RFC 5321; 128 leaves headroom for legitimate
+/// non-ASCII handles after NFC expansion.
+pub const MAX_HANDLE_LEN: usize = 128;
+
 /// Immutable member identifier. Used as the SMT key and as a stable reference
 /// to a member regardless of changes to their handle or p2p key.
 ///
@@ -31,6 +37,11 @@ impl MemberId {
     /// random (so the SMT tree stays well-distributed across the 256-bit
     /// keyspace). Suggested generators: cryptographic random bytes, or a hash
     /// of a stable per-member input (e.g. an enrollment artifact).
+    ///
+    /// **Uniqueness is the caller's responsibility.** Two members independently
+    /// constructed with the same byte pattern (including `[0u8; 32]`) will
+    /// collide -- `add_member` will reject the second one with `DuplicateId`,
+    /// but the situation should be avoided. Don't hard-code id values.
     pub fn new(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
@@ -184,6 +195,13 @@ pub fn validate_handle(handle: &str) -> Result<String, OrgMembersError> {
 
     let normalized: String = handle.nfc().collect();
 
+    if normalized.len() > MAX_HANDLE_LEN {
+        return Err(OrgMembersError::InvalidHandle(format!(
+            "handle exceeds {} bytes after NFC normalization",
+            MAX_HANDLE_LEN
+        )));
+    }
+
     for ch in normalized.chars() {
         if ch.is_uppercase() {
             return Err(OrgMembersError::InvalidHandle(
@@ -222,7 +240,41 @@ pub fn handle_skeleton(handle: &str) -> String {
     skeleton(handle).collect()
 }
 
-/// Merkle root hash. 32-byte hash output.
+/// A 32-byte hash output. The fundamental hash unit produced by the
+/// `TrieHasher` trait -- used for member leaf hashes, internal node hashes,
+/// device leaf hashes, and device internal node hashes.
+///
+/// Distinct from `RootHash` for type safety: a `NodeHash` is the hash of some
+/// subtree; a `RootHash` is the externally-meaningful root of the whole org
+/// trie. They share the same byte representation but the distinction prevents
+/// accidentally using an intermediate hash where a root hash is expected.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct NodeHash(pub(crate) [u8; 32]);
+
+impl NodeHash {
+    pub fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl fmt::Debug for NodeHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "NodeHash({:02x}{:02x}{:02x}{:02x}..)",
+            self.0[0], self.0[1], self.0[2], self.0[3]
+        )
+    }
+}
+
+/// The externally-meaningful root of an org trie. Wraps the same bytes as
+/// `NodeHash` but is type-distinct: only the trie root is a `RootHash`,
+/// intermediate node hashes are `NodeHash`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RootHash(pub(crate) [u8; 32]);
@@ -234,6 +286,12 @@ impl RootHash {
 
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
+    }
+}
+
+impl From<NodeHash> for RootHash {
+    fn from(h: NodeHash) -> Self {
+        Self(h.0)
     }
 }
 
@@ -266,8 +324,9 @@ impl<'de> serde::Deserialize<'de> for P2pDeviceSlots {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let slots = Vec::<P2pDeviceKey>::deserialize(d)?;
         // Re-run constructor validation so an attacker-supplied wire format
-        // cannot bypass invariants (empty list, exceeds MAX_DEVICES, duplicates,
-        // unsorted). `P2pDeviceSlots::new` sorts and checks all of these.
+        // cannot bypass invariants: exceeds MAX_DEVICES, duplicates. Empty
+        // is allowed (isolated state, see P2pDeviceSlots::new). Unsorted wire
+        // input is silently normalized into canonical sorted form.
         P2pDeviceSlots::new(slots).map_err(serde::de::Error::custom)
     }
 }
@@ -302,7 +361,9 @@ impl P2pDeviceSlots {
         self.slots.len()
     }
 
-    pub fn add_device(&self, device: P2pDeviceKey) -> Result<Self, OrgMembersError> {
+    /// Adds a device. Crate-private because external code must go through
+    /// `OrgTrie::add_p2p_device`, which has the correct atomicity guarantees.
+    pub(crate) fn add_device(&self, device: P2pDeviceKey) -> Result<Self, OrgMembersError> {
         if self.slots.len() >= MAX_DEVICES {
             return Err(OrgMembersError::DeviceSlotsFull);
         }
@@ -315,7 +376,11 @@ impl P2pDeviceSlots {
         Ok(Self { slots: new_slots })
     }
 
-    pub fn remove_device(&self, device: &P2pDeviceKey) -> Result<Self, OrgMembersError> {
+    /// Removes a device. Crate-private because external code must go through
+    /// `OrgTrie::delete_p2p_device`, which requires a `new_p2p_key` to be
+    /// supplied in the same call (the deleted device had access to the old
+    /// key). Exposing this directly would let callers bypass the rotation.
+    pub(crate) fn remove_device(&self, device: &P2pDeviceKey) -> Result<Self, OrgMembersError> {
         let idx = self
             .slots
             .binary_search(device)
@@ -328,7 +393,9 @@ impl P2pDeviceSlots {
         Ok(Self { slots: new_slots })
     }
 
-    pub fn to_fixed_slots(&self) -> [Option<P2pDeviceKey>; MAX_DEVICES] {
+    /// Internal helper: returns the slot array padded with None up to MAX_DEVICES.
+    /// Used by the device sub-trie hash computation.
+    pub(crate) fn to_fixed_slots(&self) -> [Option<P2pDeviceKey>; MAX_DEVICES] {
         let mut fixed = [None; MAX_DEVICES];
         for (i, device) in self.slots.iter().enumerate() {
             fixed[i] = Some(*device);
@@ -503,8 +570,11 @@ impl MemberLeaf {
         &self.p2p_devices
     }
 
-    /// Canonical byte encoding for hashing.
-    pub fn canonical_bytes(&self, p2p_device_sub_trie_root: &[u8; 32]) -> Vec<u8> {
+    /// Canonical byte encoding for hashing. Crate-private because external
+    /// callers cannot meaningfully compute `p2p_device_sub_trie_root` without
+    /// invoking internal device-trie hashing -- exposing this would invite
+    /// callers to produce bytes that don't match what the trie actually hashes.
+    pub(crate) fn canonical_bytes(&self, p2p_device_sub_trie_root: &NodeHash) -> Vec<u8> {
         let mut buf = Vec::new();
         // id: 32 bytes raw
         buf.extend_from_slice(self.id.as_bytes());
@@ -523,7 +593,7 @@ impl MemberLeaf {
         buf.extend_from_slice(&(surname_bytes.len() as u32).to_le_bytes());
         buf.extend_from_slice(surname_bytes);
         // p2p_device_sub_trie_root: 32 bytes raw
-        buf.extend_from_slice(p2p_device_sub_trie_root);
+        buf.extend_from_slice(p2p_device_sub_trie_root.as_bytes());
         buf
     }
 }

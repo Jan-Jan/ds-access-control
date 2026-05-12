@@ -87,6 +87,10 @@ extending an existing one. Test each domain operation independently in
   anchored to a `base_root`. The wire format between admins.
 - **CandidateTrie** -- result of applying a delta. Cannot be queried; must be
   verified against an expected root hash before becoming a usable `OrgTrie`.
+- **NodeHash** -- 32-byte hash output from `TrieHasher` (any internal node,
+  leaf, or root of a subtree).
+- **RootHash** -- type-distinct wrapper for the externally-meaningful root
+  of the whole trie. `From<NodeHash> for RootHash` converts at the boundary.
 - **Skeleton** -- UTS#39 canonical form for confusable detection. Two handles
   with the same skeleton are rejected as homoglyphs.
 
@@ -97,8 +101,10 @@ Do NOT introduce: "user", "account", "node id" (ambiguous), or naked "group"
 
 1. SMT key is the `MemberId` -- handle and `p2p_key` are independent of it
    and of each other.
-2. After `insert`/`update`/`delete`, hashes are NOT computed. `recalculate()`
-   fills them. `root_hash()` returns `Err(HashesNotCalculated)` until then.
+2. After any mutation (`add_member`, `delete_member`, `update_*`,
+   `rotate_p2p_key`, `add_p2p_device`, `delete_p2p_device`, `emergency_isolate_member`),
+   hashes are NOT computed. `recalculate()` fills them. `root_hash()` returns
+   `Err(HashesNotCalculated)` until then.
 3. Path-copying preserves immutability: old trie's `root_hash()` is unchanged
    after mutating a new copy.
 4. `apply_delta`:
@@ -122,10 +128,12 @@ cargo check --no-default-features --features serde                         # no_
 cargo check --no-default-features --features serde --target wasm32-unknown-unknown
 ```
 
-Tests: 55 integration + 5 proptest. Add to:
+Tests live in:
 - `org-members/tests/integration_test.rs` -- example/unit-style scenarios
 - `org-members/tests/fuzz_tests.rs` -- proptest invariants (no panics, count
-  consistency, delta/diff roundtrip, immutability)
+  consistency, delta roundtrip, immutability)
+
+Test count varies by commit; `cargo test` is the source of truth.
 
 ## Lessons learned (don't repeat these)
 

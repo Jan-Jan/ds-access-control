@@ -10,6 +10,10 @@ description = "Immutable binary Sparse Merkle Tree for organisation membership m
 default = ["std", "serde"]
 std = ["serde?/std", "postcard?/use-std", "blake3/std", "unicode-normalization/std", "unicode-security/std"]
 serde = ["dep:serde", "dep:postcard"]
+# Exposes `delta::test_support` mutators for integration tests. NEVER enable
+# in production. The integration test crate enables this via its dev-dependency
+# on the lib (self-referential, applied only when building tests).
+test-helpers = []
 
 [dependencies]
 serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
@@ -29,3 +33,6 @@ spin = { version = "0.9", default-features = false, features = ["once"] }
 postcard = { version = "1", features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }
 proptest = "1"
+# Self-reference enables `test-helpers` only when building tests, not in
+# downstream production builds.
+org-members = { path = ".", features = ["test-helpers"] }
