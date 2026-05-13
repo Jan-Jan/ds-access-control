@@ -503,8 +503,20 @@ In `on-chain-client/tests/common/` (not exposed as public API):
 
 ## Sequencing
 
-1. Solidity contract + Foundry tests (`on-chain/`, 5.1 coverage).
-2. Chopsticks sanity test (`tests/00_chopsticks_sanity.rs`).
+Phase 1.b is delivered in **two sequential stages** with a hard gate between them. The contract's ABI is the dependency the client crate decodes against; freezing it first avoids client rework if the contract logic later needs revision.
+
+### Stage 1 — Solidity contract (gates Stage 2)
+
+1. `on-chain/OrgRegistry.sol` and full Foundry test coverage (5.1).
+2. Chopsticks sanity test (`tests/00_chopsticks_sanity.rs`) — proves Paseo Asset Hub fork + `pallet-revive` work under chopsticks before the harness depends on them. Can run in parallel with task 1; it touches no contract code.
+
+**Gate criteria** — all of the following before Stage 2 starts:
+- All Foundry tests passing on a tagged commit.
+- Contract deployed to a chopsticks-forked Paseo Asset Hub and the sanity test reads its code hash back correctly.
+- ABI exported (Foundry artifact) and pinned in `on-chain/abi/OrgRegistry.json`.
+
+### Stage 2 — On-chain client
+
 3. `on-chain-client` crate skeleton: types, `Rpc` trait, `OrgRegistryClient` struct, `WsRpc` (jsonrpsee).
 4. Storage and event decoders, `runtime-vN` gated, fixture-tested.
 5. `get_org_state` (with optional `at: BlockRef`) and `subscribe` (yielding `SubscribedEvent`) over WS → Scenario A passes (best-block + finalised emission), Scenario C passes (reorg handling).
@@ -512,9 +524,11 @@ In `on-chain-client/tests/common/` (not exposed as public API):
 7. Scenario B and `p_address_is_orgid.rs`.
 8. `SmoldotRpc` implementation (`Rpc` trait swap).
 9. Smoldot smoke test (5.3).
-10. Pin concrete runtime version, chain endpoints, gas/storage-deposit limits in the design doc.
+10. Pin concrete runtime version, chain endpoint, gas/storage-deposit limits in the design doc.
 
-Tasks 1 and 2 can be done in parallel. Tasks 3-7 are sequential. Tasks 8 and 9 can be done in parallel after task 5.
+Tasks 3-7 are sequential. Tasks 8 and 9 can be done in parallel after task 5.
+
+If Stage 1's Foundry tests surface a needed contract change after Stage 2 has started, treat it as a stop-the-world for the client crate: revise the contract, re-pin the ABI, then continue Stage 2 from where it was (the decoders in task 4 are usually the only code that needs to track ABI changes).
 
 ## Risks
 
