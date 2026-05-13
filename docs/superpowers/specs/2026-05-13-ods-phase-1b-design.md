@@ -65,11 +65,16 @@ What this phase deliberately does **not** deliver: submission-side helpers, Soli
                                     │ emits event      │
                                     └────────┬─────────┘
                                              │ ContractEmitted
-                            ┌────────────────┴──────────────┐
-                            │ on-chain-client (smoldot)     │
-                            │ decodes event, verifies       │
-                            │ received delta against root   │
-                            └───────────────────────────────┘
+                            ┌────────────────┴───────────────────────┐
+                            │ on-chain-client (smoldot)              │
+                            │  - sees BestBlockEvent (in best block) │
+                            │      → peers start p2p delta exchange  │
+                            │  - sees FinalisedEvent (after GRANDPA) │
+                            │      → peers commit local state        │
+                            │  - sees Reorged                        │
+                            │      → peers cancel optimistic flow    │
+                            │ verifies received delta against root   │
+                            └────────────────────────────────────────┘
 ```
 
 ### Identity stack
@@ -201,6 +206,29 @@ pub enum Event {
     },
 }
 
+pub struct BlockRef {
+    pub hash:   BlockHash,
+    pub number: u64,
+}
+
+/// A stream item from `subscribe`. Best-block and finalised notifications are
+/// distinct so consumers can act optimistically on best-block events and only
+/// commit local state once finalisation arrives. Reorgs notify consumers that
+/// a previously-best block has been discarded.
+pub enum SubscribedEvent {
+    /// Event observed in a best (non-finalised) block. The PWA should start
+    /// the off-chain p2p delta exchange but NOT commit local state yet.
+    BestBlockEvent  { event: Event, at: BlockRef },
+
+    /// A previously-best block has been reorged out. Any in-flight optimistic
+    /// flow keyed on `at.hash` should be cancelled or rolled back.
+    Reorged         { discarded: BlockRef },
+
+    /// Event observed in a finalised block. The PWA should commit local state
+    /// (apply the verified delta to the local org-members trie).
+    FinalisedEvent  { event: Event, at: BlockRef },
+}
+
 impl From<OnChainRootHash> for org_members::RootHash { /* byte-for-byte */ }
 ```
 
@@ -228,11 +256,17 @@ pub struct OrgRegistryClient<R: Rpc> { /* rpc + contract address + runtime decod
 impl<R: Rpc> OrgRegistryClient<R> {
     pub async fn new(rpc: R, contract: OrgAdmin) -> Result<Self, Error>;
 
-    /// None when the slot has never been written (`epoch == 0`).
-    pub async fn get_org_state(&self, admin: &OrgAdmin) -> Result<Option<OrgState>, Error>;
+    /// `at = None` reads the latest finalised block. Passing a specific
+    /// `BlockRef` lets the PWA read state at the proposed block it just
+    /// learned about, so it can validate the new root against a candidate
+    /// trie before finalisation. None when the slot has never been written.
+    pub async fn get_org_state(&self, admin: &OrgAdmin, at: Option<BlockRef>)
+        -> Result<Option<OrgState>, Error>;
 
-    /// Stream of contract events; optional admin filter applied via the indexed topic.
-    pub fn subscribe(&self, admin: Option<OrgAdmin>) -> impl Stream<Item = Result<Event, Error>>;
+    /// Stream of best-block, reorg, and finalised notifications for events
+    /// matching `admin` (optional indexed-topic filter). See `SubscribedEvent`.
+    pub fn subscribe(&self, admin: Option<OrgAdmin>)
+        -> impl Stream<Item = Result<SubscribedEvent, Error>>;
 }
 ```
 
@@ -247,12 +281,17 @@ pub fn verify_root_against_chain(
 ) -> Result<(), VerifyError>;
 ```
 
-Off-chain peer flow:
+Off-chain peer flow, finalisation-aware:
 
-1. Receive `Delta` from an admin/peer (existing `org-members` wire type).
-2. Apply via `OrgTrie::apply_delta` → get `CandidateTrie`.
-3. Fetch `OrgState` via `OrgRegistryClient::get_org_state`.
-4. `CandidateTrie::verify_against(&on_chain.root_hash.into())` (existing `org-members` API).
+1. `subscribe(...)` yields `BestBlockEvent { event, at }` when an admin's root update is observed in a best block. The peer kicks off the p2p delta exchange optimistically.
+2. Peer receives `Delta` from an admin/peer (existing `org-members` wire type).
+3. Apply via `OrgTrie::apply_delta` → get `CandidateTrie`.
+4. Fetch `OrgState` via `get_org_state(admin, Some(at))` — *at the same block hash* — and call `CandidateTrie::verify_against(&on_chain.root_hash.into())`. If verification passes, hold the verified candidate in memory; **do not** mutate the local trie yet.
+5. One of two things happens next:
+   - `FinalisedEvent { event, at: at_final }` arrives for the same `(admin, root_hash)`. Commit the verified candidate as the new local trie.
+   - `Reorged { discarded }` arrives for the earlier `at.hash`. Discard the in-memory candidate; resume listening for a fresh `BestBlockEvent`.
+
+This pattern lets the PWA pre-fetch and verify deltas in parallel with finalisation, so the user-visible commit happens within milliseconds of GRANDPA finality rather than incurring the full p2p round-trip after finalisation.
 
 ### Decoding pallet-revive storage and events
 
@@ -315,17 +354,9 @@ Pure contract logic; admins are vanilla EOA-style addresses provided by Foundry.
 
 ### 5.2 Rust integration tests — chopsticks-forked Paseo Asset Hub
 
-Chosen for fast iteration (~2-5s startup), high determinism (programmable `dev_newBlock`), and trivial state reset. Fork preference:
+Chosen for fast iteration (~2-5s startup), high determinism (programmable `dev_newBlock`), reorg control via chopsticks' fork-building APIs, and trivial state reset.
 
-```
-1st choice: Paseo Asset Hub      (small state, Polkadot-spec runtime, pallet-revive)
-2nd choice: Polkadot Asset Hub   (larger state, fall back if Paseo is unstable
-                                  or its runtime lacks needed pallet-revive features)
-```
-
-The exact WSS endpoint URLs are confirmed at the start of implementation (see Open Items) — they're available via the official Polkadot ecosystem docs and the chopsticks repo's example config.
-
-The fallback is encoded in `tests/common/chopsticks_fork.rs::fork_for_tests()`; CI surfaces which target succeeded so a flaky Paseo manifests as a visible warning, not a green build hiding it.
+**Fork target — Paseo Asset Hub only for Phase 1.b.** Paseo's runtime tracks Polkadot's closely, has `pallet-revive`, and has a small enough state to fork quickly. The exact WSS endpoint URL is confirmed at the start of implementation (see Open Items). Adding Polkadot Asset Hub as a fallback target later is a one-function change in `tests/common/chopsticks_fork.rs` — deferred until Paseo proves insufficient.
 
 #### `00_chopsticks_sanity.rs`
 
@@ -333,25 +364,32 @@ Runs first. Deploys a no-op contract via `pallet-revive` and reads its code hash
 
 #### Scenario A — `two_orgs_one_watcher.rs`
 
-Validates per-admin event filtering and per-org storage isolation in the shared contract.
+Validates per-admin event filtering, per-org storage isolation in the shared contract, and the best-block-then-finalised emission ordering.
 
 ```
 Setup:    two pure proxies P_A, P_B, each with M([signer], 1) as sole proxy.
           Deploy OrgRegistry once.
 
-Actions:  Interleaved (in order):
+Actions:  Interleaved best-block submissions (in order):
             P_A: update(root_a0, pk_a0, 0)   → GenesisInitialized
             P_B: update(root_b0, pk_b0, 0)   → GenesisInitialized
             P_A: update(root_a1, pk_a1, 1)   → RootUpdated(epoch=2)
             P_B: update(root_b1, pk_b1, 1)   → RootUpdated(epoch=2)
+          Then advance chopsticks until all blocks above are finalised.
 
 Watcher:  client.subscribe(Some(h160_of(P_A)))
 
-Asserts:  - Watcher receives exactly 2 events (Genesis + Update for A).
+Asserts:  - Watcher receives exactly 2 BestBlockEvent items (Genesis + Update
+            for A), in submission order.
+          - Watcher then receives exactly 2 FinalisedEvent items (same Genesis +
+            Update for A), in the same order.
           - Every received event carries admin == h160_of(P_A).
-          - Stream times out cleanly with no further events (no leakage of B).
-          - client.get_org_state(h160_of(P_A)).epoch == 2, root == root_a1
-          - client.get_org_state(h160_of(P_B)).epoch == 2, root == root_b1
+          - No Reorged items.
+          - Stream times out cleanly with no further events (no leakage of B's
+            events under either status).
+          - get_org_state(h160_of(P_A), Some(last_best_block)).epoch == 2
+          - get_org_state(h160_of(P_A), None).epoch == 2  (latest finalised)
+          - get_org_state(h160_of(P_B), None).epoch == 2, root == root_b1
 ```
 
 #### Scenario B — `off_chain_genesis_ceremony.rs`
@@ -413,6 +451,38 @@ Step 9: Sanity update via M([A1,A2], 2).
 
 What this proves: (a) the atomic `batch_all(add + remove)` idiom safely swaps proxies without leaving `P` undelegated; (b) every authorization layer is a multisig pseudo-account; (c) the contract storage key (`h160_of(P)`) is stable across admin-set rotations.
 
+#### Scenario C — `reorg_cancels_proposed.rs`
+
+Validates that consumers can distinguish optimistic best-block events from finalised ones, and that a reorg discarding the original best block is surfaced before finalisation.
+
+```
+Setup:    one pure proxy P_A with M([signer], 1) as sole proxy.
+          Deploy OrgRegistry once.
+
+Actions:
+  1. Submit P_A: update(root_a0, pk_a0, 0) on the current best chain.
+     Wait for BestBlockEvent.
+  2. Use chopsticks' fork-building API to rewind one block and build an
+     alternative best chain that does NOT include the update extrinsic
+     (e.g. dev_setHead to a pre-update block, then dev_newBlock without
+     including the update tx in the mempool).
+  3. On the new best chain, submit P_A: update(root_a0', pk_a0', 0)
+     with different inputs.
+  4. Advance until the new chain finalises.
+
+Watcher:  client.subscribe(Some(h160_of(P_A)))
+
+Asserts:  - First yields BestBlockEvent for the original (root_a0, pk_a0).
+          - Then yields a Reorged item carrying the discarded block hash.
+          - Then yields a BestBlockEvent for (root_a0', pk_a0') at the new
+            best block.
+          - Finally yields a FinalisedEvent for (root_a0', pk_a0').
+          - No FinalisedEvent for (root_a0, pk_a0) ever arrives.
+          - get_org_state(h160_of(P_A), None) reflects (root_a0', pk_a0').
+```
+
+This is the regression guard for the PWA's optimistic-flow correctness: if `Reorged` ever stops firing, the PWA would commit local state for an update that's no longer on the canonical chain.
+
 #### `p_address_is_orgid.rs` — the OrgId invariant in isolation
 
 Runs the full Scenario B ceremony and asserts at every state transition that `h160_of(P) == h160_of(P)_initial`. Lives in its own file so reviewers can read it in isolation and convince themselves the OrgId is stable, and so it produces a clean failure signal if (for example) a future change to `pallet-revive`'s account mapping breaks the invariant in a way Scenario B's other assertions wouldn't catch.
@@ -437,8 +507,8 @@ In `on-chain-client/tests/common/` (not exposed as public API):
 2. Chopsticks sanity test (`tests/00_chopsticks_sanity.rs`).
 3. `on-chain-client` crate skeleton: types, `Rpc` trait, `OrgRegistryClient` struct, `WsRpc` (jsonrpsee).
 4. Storage and event decoders, `runtime-vN` gated, fixture-tested.
-5. `get_org_state` and `subscribe` over WS → Scenario A passes.
-6. Test harness `common/` module (multisig derivation, h160 mapper, swap_proxy, chopsticks_fork).
+5. `get_org_state` (with optional `at: BlockRef`) and `subscribe` (yielding `SubscribedEvent`) over WS → Scenario A passes (best-block + finalised emission), Scenario C passes (reorg handling).
+6. Test harness `common/` module (multisig derivation, h160 mapper, swap_proxy, chopsticks_fork, chopsticks-reorg helpers).
 7. Scenario B and `p_address_is_orgid.rs`.
 8. `SmoldotRpc` implementation (`Rpc` trait swap).
 9. Smoldot smoke test (5.3).
@@ -453,15 +523,16 @@ Tasks 1 and 2 can be done in parallel. Tasks 3-7 are sequential. Tasks 8 and 9 c
 | 1 | `pallet-revive` is pre-stable; storage layout, account mapping, or event format could change. | Pin runtime version; gate decoders behind `runtime-vN` features; one fixture test per decoder; chopsticks fork reports the live version. |
 | 2 | Chopsticks may not execute `pallet-revive` faithfully under lazy execution. | Discovered early via task 2 sanity test. Fallback: local `polkadot-asset-hub --dev`. |
 | 3 | Smoldot's JSON-RPC v2 chainHead group is also unstable. | `Rpc` trait isolates the transport; WS fallback remains available. |
-| 4 | Paseo's `pallet-revive` may lag Polkadot's. | `fork_for_tests` falls back to Polkadot Asset Hub; CI surfaces which target won. |
+| 4 | Paseo's `pallet-revive` may lag Polkadot's or behave differently. | Treated as a blocker if it occurs; we ship Polkadot-AH fallback then. Phase 1.b targets Paseo only. |
 | 5 | Our `h160_of` could drift from `pallet-revive`'s mapping. | Fixture test pinning to a known-good pallet output; reverified per chopsticks fork. |
 | 6 | Permissionless `update(...)` (any H160 can create its own org slot). | Intentional, documented; Foundry test demonstrates two unrelated addresses each getting their own slot. |
 | 7 | No on-chain audit trail of admin-set changes — pallet-proxy emits events, contract doesn't. | Spec already acknowledges this gap; carried forward unchanged. Documented in "known gaps". |
+| 8 | Reorg handling in `subscribe`: chopsticks-emulated reorgs must match what real Asset Hub produces over smoldot's `chainHead_v1_follow`. | Scenario C exercises the chopsticks path. The smoldot smoke test (5.3) exercises the real-node best/finalised path. Cross-checking the two confirms no chopsticks-only divergence in reorg semantics. |
 
 ## Open items (to be resolved during implementation)
 
 - Exact runtime version to pin. Set at the start of implementation based on what Paseo Asset Hub is running.
-- Exact WSS endpoint URLs for Paseo Asset Hub and Polkadot Asset Hub (looked up at implementation time).
+- Exact Paseo Asset Hub WSS endpoint URL (looked up at implementation time).
 - Gas limits and storage-deposit limits for the `revive.call` payload — determined empirically from chopsticks dry-runs.
 - CI matrix: default `cargo test --features dev-rpc` (WS); `--features smoldot` for the smoke job.
 - Threshold-1 multisig handling: pallet-multisig dispatches threshold-1 via `as_multi_threshold_1` (a different extrinsic from `as_multi`). The test harness's `multisig_dispatch` helper picks the right call automatically; the pseudo-account derivation is unchanged. Verified during task 6 (harness implementation).
