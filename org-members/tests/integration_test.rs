@@ -1096,27 +1096,6 @@ fn member_key_rotation_through_delta() {
 // --- Adversarial apply_delta (I-2) ---
 
 #[test]
-fn apply_delta_ignores_stale_removal() {
-    let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
-
-    // Construct a delta that removes a member who doesn't exist.
-    let ghost_id = member_id("ghost-id");
-    let crafted = trie.delete_member(&member_id("alice-id")).unwrap();
-    let (target, mut delta) = crafted.recalculate().unwrap();
-
-    // Inject a stale removal of ghost-id into the delta.
-    let mut new_removed = delta.removed().to_vec();
-    new_removed.push(ghost_id);
-    org_members::delta::test_support::delta_set_removed(&mut delta, new_removed);
-
-    // apply_delta must not underflow member_count, and the resulting candidate
-    // must verify against the target trie (which doesn't include ghost-id).
-    let candidate = trie.apply_delta(&delta).unwrap();
-    let result = candidate.verify_against(&target.root_hash().unwrap()).unwrap();
-    assert_eq!(result.member_count(), target.member_count());
-}
-
-#[test]
 fn apply_delta_rejects_confusable_in_upsert() {
     let (h1, h2) =
         find_confusable_pair().expect("test setup: no confusable pair found among candidates");
@@ -1241,4 +1220,319 @@ fn member_leaf_new_rejects_empty_device_list() {
         vec![],
     );
     assert_eq!(err.unwrap_err(), OrgMembersError::EmptyDeviceList);
+}
+
+// --- Error variant smoke tests (Task 1 of Hyperbridge fixes) ---
+
+#[test]
+fn malformed_delta_error_displays_reason() {
+    let err = OrgMembersError::MalformedDelta("test reason");
+    assert_eq!(format!("{}", err), "malformed delta: test reason");
+}
+
+#[test]
+fn field_too_long_error_displays_field_and_max() {
+    let err = OrgMembersError::FieldTooLong { field: "name", max: 128 };
+    assert_eq!(format!("{}", err), "field too long: name exceeds 128 bytes after NFC normalization");
+}
+
+// --- H-3: name/surname length caps ---
+
+#[test]
+fn member_leaf_new_rejects_oversized_name() {
+    let long_name = "a".repeat(129);
+    let err = MemberLeaf::new(
+        member_id("k"),
+        "alice",
+        member_key("k"),
+        &long_name,
+        "B",
+        vec![device_key("d")],
+    );
+    assert_eq!(
+        err.unwrap_err(),
+        OrgMembersError::FieldTooLong { field: "name", max: 128 }
+    );
+}
+
+#[test]
+fn member_leaf_new_rejects_oversized_surname() {
+    let long_surname = "b".repeat(129);
+    let err = MemberLeaf::new(
+        member_id("k"),
+        "alice",
+        member_key("k"),
+        "A",
+        &long_surname,
+        vec![device_key("d")],
+    );
+    assert_eq!(
+        err.unwrap_err(),
+        OrgMembersError::FieldTooLong { field: "surname", max: 128 }
+    );
+}
+
+#[test]
+fn member_leaf_new_accepts_max_length_name_and_surname() {
+    let name_128 = "a".repeat(128);
+    let surname_128 = "b".repeat(128);
+    let ok = MemberLeaf::new(
+        member_id("k"),
+        "alice",
+        member_key("k"),
+        &name_128,
+        &surname_128,
+        vec![device_key("d")],
+    );
+    assert!(ok.is_ok());
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn deserialize_rejects_oversized_name() {
+    use postcard::{from_bytes, to_allocvec};
+    use org_members::types::P2pDeviceSlots;
+
+    #[derive(serde::Serialize)]
+    struct WireLeaf<'a> {
+        id: MemberId,
+        handle: &'a str,
+        p2p_key: P2pMemberKey,
+        name: &'a str,
+        surname: &'a str,
+        p2p_devices: P2pDeviceSlots,
+    }
+    let long_name = "a".repeat(200);
+    let wire = WireLeaf {
+        id: member_id("k"),
+        handle: "alice",
+        p2p_key: member_key("k"),
+        name: &long_name,
+        surname: "B",
+        p2p_devices: P2pDeviceSlots::new(vec![device_key("d")]).unwrap(),
+    };
+    let bytes = to_allocvec(&wire).unwrap();
+    let result: Result<MemberLeaf, _> = from_bytes(&bytes);
+    assert!(result.is_err());
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn deserialize_rejects_oversized_surname() {
+    use postcard::{from_bytes, to_allocvec};
+    use org_members::types::P2pDeviceSlots;
+
+    #[derive(serde::Serialize)]
+    struct WireLeaf<'a> {
+        id: MemberId,
+        handle: &'a str,
+        p2p_key: P2pMemberKey,
+        name: &'a str,
+        surname: &'a str,
+        p2p_devices: P2pDeviceSlots,
+    }
+    let long_surname = "b".repeat(200);
+    let wire = WireLeaf {
+        id: member_id("k"),
+        handle: "alice",
+        p2p_key: member_key("k"),
+        name: "A",
+        surname: &long_surname,
+        p2p_devices: P2pDeviceSlots::new(vec![device_key("d")]).unwrap(),
+    };
+    let bytes = to_allocvec(&wire).unwrap();
+    let result: Result<MemberLeaf, _> = from_bytes(&bytes);
+    assert!(result.is_err());
+}
+
+#[test]
+fn update_name_surname_rejects_oversized_name() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let long_name = "a".repeat(129);
+    let err = trie.update_name_surname(&member_id("alice-id"), &long_name, "Smith");
+    assert_eq!(
+        err.unwrap_err(),
+        OrgMembersError::FieldTooLong { field: "name", max: 128 }
+    );
+}
+
+#[test]
+fn update_name_surname_rejects_oversized_surname() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let long_surname = "b".repeat(129);
+    let err = trie.update_name_surname(&member_id("alice-id"), "Alice", &long_surname);
+    assert_eq!(
+        err.unwrap_err(),
+        OrgMembersError::FieldTooLong { field: "surname", max: 128 }
+    );
+}
+
+// --- H-2: P2pDeviceSlots deserialize rejects non-canonical wire form ---
+
+#[cfg(feature = "serde")]
+#[test]
+fn deserialize_rejects_unsorted_devices() {
+    use postcard::{from_bytes, to_allocvec};
+    let d1 = device_key("d1");
+    let d2 = device_key("d2");
+    let (lo, hi) = if d1.as_bytes() < d2.as_bytes() { (d1, d2) } else { (d2, d1) };
+    let unsorted_wire: Vec<P2pDeviceKey> = vec![hi, lo];
+    let bytes = to_allocvec(&unsorted_wire).unwrap();
+    let result: Result<org_members::types::P2pDeviceSlots, _> = from_bytes(&bytes);
+    assert!(result.is_err(), "deserialize must reject unsorted device list");
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn deserialize_rejects_duplicate_devices() {
+    use postcard::{from_bytes, to_allocvec};
+    let d = device_key("d1");
+    let dup_wire: Vec<P2pDeviceKey> = vec![d, d];
+    let bytes = to_allocvec(&dup_wire).unwrap();
+    let result: Result<org_members::types::P2pDeviceSlots, _> = from_bytes(&bytes);
+    assert!(result.is_err(), "deserialize must reject duplicate devices");
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn deserialize_rejects_too_many_devices() {
+    use postcard::{from_bytes, to_allocvec};
+    let many: Vec<P2pDeviceKey> = (0..5).map(|i| device_key(&format!("d{}", i))).collect();
+    // Sort so we hit the count check, not the order check.
+    let mut sorted = many.clone();
+    sorted.sort();
+    let bytes = to_allocvec(&sorted).unwrap();
+    let result: Result<org_members::types::P2pDeviceSlots, _> = from_bytes(&bytes);
+    assert!(result.is_err(), "deserialize must reject more than MAX_DEVICES");
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn deserialize_accepts_sorted_unique_devices() {
+    use postcard::{from_bytes, to_allocvec};
+    let d1 = device_key("d1");
+    let d2 = device_key("d2");
+    let (lo, hi) = if d1.as_bytes() < d2.as_bytes() { (d1, d2) } else { (d2, d1) };
+    let canonical: Vec<P2pDeviceKey> = vec![lo, hi];
+    let bytes = to_allocvec(&canonical).unwrap();
+    let result: org_members::types::P2pDeviceSlots = from_bytes(&bytes).unwrap();
+    assert_eq!(result.device_count(), 2);
+}
+
+// --- H-1: apply_delta rejects non-canonical Delta ---
+
+#[test]
+fn apply_delta_rejects_stale_removal() {
+    // After H-1: a removal of an id not present in the trie is MalformedDelta.
+    // (Previously this was silently tolerated -- see commit history for the
+    // prior test apply_delta_ignores_stale_removal which is now removed.)
+    let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    let ghost_id = member_id("ghost-id");
+    let crafted = trie.delete_member(&member_id("alice-id")).unwrap();
+    let (_target, mut delta) = crafted.recalculate().unwrap();
+    let mut new_removed = delta.removed().to_vec();
+    new_removed.push(ghost_id);
+    new_removed.sort();
+    org_members::delta::test_support::delta_set_removed(&mut delta, new_removed);
+
+    let err = trie.apply_delta(&delta).unwrap_err();
+    assert!(matches!(err, OrgMembersError::MalformedDelta(_)));
+}
+
+#[test]
+fn apply_delta_rejects_unsorted_removed() {
+    let trie = TestTrie::genesis(vec![alice(), bob(), charlie()]).unwrap();
+    let modified = trie
+        .delete_member(&member_id("alice-id")).unwrap()
+        .delete_member(&member_id("bob-id")).unwrap();
+    let (_target, mut delta) = modified.recalculate().unwrap();
+    let mut rev = delta.removed().to_vec();
+    rev.reverse();
+    if rev.len() < 2 || rev[0] < rev[1] {
+        panic!("test setup expected ≥2 removals in decreasing order");
+    }
+    org_members::delta::test_support::delta_set_removed(&mut delta, rev);
+
+    let err = trie.apply_delta(&delta).unwrap_err();
+    assert!(matches!(err, OrgMembersError::MalformedDelta(_)));
+}
+
+#[test]
+fn apply_delta_rejects_duplicate_in_removed() {
+    let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    let modified = trie.delete_member(&member_id("alice-id")).unwrap();
+    let (_target, mut delta) = modified.recalculate().unwrap();
+    let one = delta.removed()[0];
+    org_members::delta::test_support::delta_set_removed(&mut delta, vec![one, one]);
+
+    let err = trie.apply_delta(&delta).unwrap_err();
+    assert!(matches!(err, OrgMembersError::MalformedDelta(_)));
+}
+
+#[test]
+fn apply_delta_rejects_duplicate_in_upserted() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let modified = trie.add_member(bob()).unwrap();
+    let (_target, mut delta) = modified.recalculate().unwrap();
+    let one = delta.upserted()[0].clone();
+    org_members::delta::test_support::delta_set_upserted(&mut delta, vec![one.clone(), one]);
+
+    let err = trie.apply_delta(&delta).unwrap_err();
+    assert!(matches!(err, OrgMembersError::MalformedDelta(_)));
+}
+
+#[test]
+fn apply_delta_rejects_unsorted_upserted() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let modified = trie.add_member(bob()).unwrap().add_member(charlie()).unwrap();
+    let (_target, mut delta) = modified.recalculate().unwrap();
+    if delta.upserted().len() < 2 {
+        panic!("test setup expected ≥2 upserts");
+    }
+    let mut rev = delta.upserted().to_vec();
+    rev.reverse();
+    org_members::delta::test_support::delta_set_upserted(&mut delta, rev);
+
+    let err = trie.apply_delta(&delta).unwrap_err();
+    assert!(matches!(err, OrgMembersError::MalformedDelta(_)));
+}
+
+#[test]
+fn apply_delta_rejects_id_in_both_removed_and_upserted() {
+    let trie = TestTrie::genesis(vec![alice()]).unwrap();
+    let modified = trie
+        .rotate_p2p_key(&member_id("alice-id"), member_key("alice-rotated"))
+        .unwrap();
+    let (_target, mut delta) = modified.recalculate().unwrap();
+    org_members::delta::test_support::delta_set_removed(&mut delta, vec![member_id("alice-id")]);
+
+    let err = trie.apply_delta(&delta).unwrap_err();
+    assert!(matches!(err, OrgMembersError::MalformedDelta(_)));
+}
+
+#[test]
+fn apply_delta_rejects_noop_upsert() {
+    let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    let modified = trie.add_member(charlie()).unwrap();
+    let (_target, mut delta) = modified.recalculate().unwrap();
+    let mut up = delta.upserted().to_vec();
+    up.push(alice());
+    up.sort_by(|a, b| a.id().cmp(b.id()));
+    org_members::delta::test_support::delta_set_upserted(&mut delta, up);
+
+    let err = trie.apply_delta(&delta).unwrap_err();
+    assert!(matches!(err, OrgMembersError::MalformedDelta(_)));
+}
+
+#[test]
+fn apply_delta_canonical_delta_still_works() {
+    // Sanity: the strict checks must not break honest round-trips.
+    let trie = TestTrie::genesis(vec![alice(), bob()]).unwrap();
+    let updated = trie.add_member(charlie()).unwrap();
+    let updated = updated.delete_member(&member_id("alice-id")).unwrap();
+    let (updated, delta) = updated.recalculate().unwrap();
+
+    let candidate = trie.apply_delta(&delta).unwrap();
+    let verified = candidate.verify_against(&updated.root_hash().unwrap()).unwrap();
+    assert_eq!(verified.root_hash().unwrap(), updated.root_hash().unwrap());
 }

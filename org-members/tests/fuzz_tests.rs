@@ -327,3 +327,164 @@ proptest! {
         prop_assert_eq!(original.member_count(), original_count);
     }
 }
+
+// ============================================================
+// H-1 / H-2 canonicality fuzz: every non-canonical mutation of
+// an honest delta must be rejected by apply_delta with
+// OrgMembersError::MalformedDelta.
+// ============================================================
+
+use org_members::OrgMembersError;
+
+#[derive(Debug, Clone)]
+enum Mutator {
+    /// Append a stale (unused) removal.
+    AppendStaleRemoval,
+    /// Duplicate the last entry in `removed`.
+    DuplicateLastRemoved,
+    /// Duplicate the last entry in `upserted`.
+    DuplicateLastUpserted,
+    /// Reverse `removed` (force unsorted, only meaningful when len >= 2).
+    ReverseRemoved,
+    /// Reverse `upserted` (force unsorted, only meaningful when len >= 2).
+    ReverseUpserted,
+    /// Append a no-op upsert (clone of a current trie leaf that is NOT already
+    /// in the upsert list; chooses the first handle from HANDLES that fits).
+    AppendNoopUpsert,
+    /// Move the first removed id into upserted as a leaf-clone (id in both sides).
+    MoveRemovedIntoUpserted,
+}
+
+fn arb_mutator() -> impl Strategy<Value = Mutator> {
+    prop_oneof![
+        Just(Mutator::AppendStaleRemoval),
+        Just(Mutator::DuplicateLastRemoved),
+        Just(Mutator::DuplicateLastUpserted),
+        Just(Mutator::ReverseRemoved),
+        Just(Mutator::ReverseUpserted),
+        Just(Mutator::AppendNoopUpsert),
+        Just(Mutator::MoveRemovedIntoUpserted),
+    ]
+}
+
+proptest! {
+    #[test]
+    fn delta_canonicality_fuzz(
+        seed_ops in proptest::collection::vec(arb_delta_op(), 1..8),
+        mutator in arb_mutator(),
+    ) {
+        // 1. Build a honest base trie and honest delta.
+        // HANDLES[0..4] are unique, so no dedup needed.
+        let initial: Vec<_> = HANDLES
+            .iter()
+            .take(4)
+            .filter_map(|h| make_member(h, 0))
+            .collect();
+        let base = TestTrie::genesis(initial).unwrap();
+
+        let mut work = base.clone();
+        for op in &seed_ops {
+            match op {
+                DeltaOp::Insert(idx) => {
+                    if let Some(m) = make_member(HANDLES[*idx], 0) {
+                        if let Ok(t) = work.add_member(m) { work = t; }
+                    }
+                }
+                DeltaOp::Delete(idx) => {
+                    let id = member_id(&format!("{}-id-0", HANDLES[*idx]));
+                    if let Ok(t) = work.delete_member(&id) { work = t; }
+                }
+            }
+        }
+        let (_target, mut delta) = match work.recalculate() {
+            Ok(r) => r,
+            Err(_) => return Ok(()),
+        };
+        if delta.is_empty() {
+            return Ok(());
+        }
+
+        // 2. Apply the mutator. If the mutation can't be applied to this delta
+        //    shape, early-return Ok(()) — proptest will still explore shapes
+        //    where the mutator fires.
+        match mutator {
+            Mutator::AppendStaleRemoval => {
+                let ghost = member_id("zzz-fuzz-ghost-id-xyzzy");
+                let mut r = delta.removed().to_vec();
+                if r.iter().any(|x| *x == ghost) || base.contains(&ghost) {
+                    return Ok(());
+                }
+                r.push(ghost);
+                r.sort();
+                org_members::delta::test_support::delta_set_removed(&mut delta, r);
+            }
+            Mutator::DuplicateLastRemoved => {
+                let r = delta.removed();
+                if r.is_empty() { return Ok(()); }
+                let mut new = r.to_vec();
+                new.push(*r.last().unwrap());
+                org_members::delta::test_support::delta_set_removed(&mut delta, new);
+            }
+            Mutator::DuplicateLastUpserted => {
+                let u = delta.upserted();
+                if u.is_empty() { return Ok(()); }
+                let mut new: Vec<MemberLeaf> = u.to_vec();
+                new.push(u.last().unwrap().clone());
+                org_members::delta::test_support::delta_set_upserted(&mut delta, new);
+            }
+            Mutator::ReverseRemoved => {
+                let r = delta.removed();
+                if r.len() < 2 { return Ok(()); }
+                let mut new = r.to_vec();
+                new.reverse();
+                org_members::delta::test_support::delta_set_removed(&mut delta, new);
+            }
+            Mutator::ReverseUpserted => {
+                let u = delta.upserted();
+                if u.len() < 2 { return Ok(()); }
+                let mut new: Vec<MemberLeaf> = u.to_vec();
+                new.reverse();
+                org_members::delta::test_support::delta_set_upserted(&mut delta, new);
+            }
+            Mutator::AppendNoopUpsert => {
+                let removed: Vec<_> = delta.removed().to_vec();
+                let upserted_ids: Vec<_> = delta.upserted().iter().map(|m| *m.id()).collect();
+                let leaf = match base.members().into_iter().find(|m| {
+                    !removed.contains(m.id()) && !upserted_ids.contains(m.id())
+                }) {
+                    Some(l) => l,
+                    None => return Ok(()),
+                };
+                let mut new: Vec<MemberLeaf> = delta.upserted().to_vec();
+                new.push(leaf);
+                new.sort_by(|a, b| a.id().cmp(b.id()));
+                org_members::delta::test_support::delta_set_upserted(&mut delta, new);
+            }
+            Mutator::MoveRemovedIntoUpserted => {
+                let r = delta.removed();
+                if r.is_empty() { return Ok(()); }
+                let collide_id = r[0];
+                let leaf = match base.get(&collide_id) {
+                    Some(l) => l,
+                    None => return Ok(()),
+                };
+                let mut new: Vec<MemberLeaf> = delta.upserted().to_vec();
+                new.push(leaf);
+                new.sort_by(|a, b| a.id().cmp(b.id()));
+                org_members::delta::test_support::delta_set_upserted(&mut delta, new);
+            }
+        }
+
+        // 3. apply_delta must now reject with MalformedDelta.
+        let err = match base.apply_delta(&delta) {
+            Ok(_) => return Err(TestCaseError::fail(
+                "apply_delta accepted a non-canonical delta (mutator ran but check missed)"
+            )),
+            Err(e) => e,
+        };
+        prop_assert!(
+            matches!(err, OrgMembersError::MalformedDelta(_)),
+            "expected MalformedDelta, got {:?}", err,
+        );
+    }
+}

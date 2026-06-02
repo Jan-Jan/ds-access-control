@@ -13,6 +13,49 @@ use crate::trie::OrgTrie;
 use crate::types::{MemberId, MemberLeaf, RootHash};
 
 /// A set of changes anchored to a specific base trie root.
+///
+/// # Canonical-form invariant
+///
+/// Every `Delta` accepted by `OrgTrie::apply_delta` is in canonical form:
+///
+/// - `removed` is strictly increasing by `MemberId` and every id is present in
+///   the trie at `base_root`.
+/// - `upserted` is strictly increasing by `MemberId` and every leaf produces
+///   an observable change vs. the current state at that id.
+/// - `removed` and `upserted` are disjoint.
+///
+/// Combined with the fact that `recalculate()`, `calculate_delta()`, and
+/// `pending_changes()` all produce canonical deltas by construction (via
+/// `diff_recursive`'s left-then-right SMT traversal), this gives the higher-
+/// level layer a strong guarantee: for any `(base_root, target_root)` pair,
+/// there is exactly one postcard byte string of a `Delta` that `apply_delta`
+/// will accept.
+///
+/// # What this crate does NOT do
+///
+/// `Delta` is scoped only by `base_root`. The following are the caller's
+/// responsibility and MUST be enforced upstream of `apply_delta`:
+///
+/// - **Authentication** — verify a signature over `postcard(Delta)` bytes
+///   against an admin/quorum key before applying.
+/// - **Organisation binding** — wrap deltas in `(org_id, postcard(Delta),
+///   signature)` envelopes; the lib has no notion of which organisation a
+///   delta belongs to.
+/// - **Replay protection across time** — `base_root` rejects deltas once the
+///   trie has moved past their parent, but a trie that revisits a prior root
+///   would accept a stale delta. Use a monotonic sequence number in the
+///   envelope.
+/// - **Authority** — `apply_delta` accepts any well-formed change; whether the
+///   signer is allowed to make this change (quorum, role-based veto, rate
+///   limits) is policy that lives above this crate.
+/// - **Independent trusted root** — `CandidateTrie::verify_against`'s
+///   `expected_root` argument must come from a path the attacker cannot
+///   control (on-chain commit, signed admin attestation, etc.), not from the
+///   same payload as the delta.
+///
+/// See `org-members/README.md` for the full enumeration of upstream security
+/// responsibilities, and `docs/superpowers/specs/2026-05-28-org-members-
+/// hyperbridge-review.md` for the threat model.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Delta {

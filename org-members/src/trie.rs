@@ -164,7 +164,21 @@ impl<H: TrieHasher> OrgTrie<H> {
         surname: &str,
     ) -> Result<Self, OrgMembersError> {
         let existing = smt::get_member(&self.root, id).ok_or(OrgMembersError::IdNotFound)?;
-        let new_leaf = existing.with_name_surname(to_nfc(name), to_nfc(surname));
+        let nfc_name = to_nfc(name);
+        if nfc_name.len() > crate::types::MAX_NAME_LEN {
+            return Err(OrgMembersError::FieldTooLong {
+                field: "name",
+                max: crate::types::MAX_NAME_LEN,
+            });
+        }
+        let nfc_surname = to_nfc(surname);
+        if nfc_surname.len() > crate::types::MAX_SURNAME_LEN {
+            return Err(OrgMembersError::FieldTooLong {
+                field: "surname",
+                max: crate::types::MAX_SURNAME_LEN,
+            });
+        }
+        let new_leaf = existing.with_name_surname(nfc_name, nfc_surname);
         self.update_leaf(new_leaf)
     }
 
@@ -275,7 +289,9 @@ impl<H: TrieHasher> OrgTrie<H> {
         Ok(Self {
             root: new_root,
             defaults: self.defaults.clone(),
-            member_count: self.member_count + 1,
+            member_count: self.member_count
+                .checked_add(1)
+                .ok_or(OrgMembersError::InvariantViolated)?,
             cached_root_hash: None,
             last_calculated_root: self.last_calculated_root.clone(),
             skeleton_index: new_skeleton_index,
@@ -336,7 +352,9 @@ impl<H: TrieHasher> OrgTrie<H> {
         Ok(Self {
             root: new_root,
             defaults: self.defaults.clone(),
-            member_count: self.member_count - 1,
+            member_count: self.member_count
+                .checked_sub(1)
+                .ok_or(OrgMembersError::InvariantViolated)?,
             cached_root_hash: None,
             last_calculated_root: self.last_calculated_root.clone(),
             skeleton_index: new_skeleton_index,
@@ -396,7 +414,85 @@ impl<H: TrieHasher> OrgTrie<H> {
         ))
     }
 
+    /// Checks the canonical-form invariant on a received delta. Returns
+    /// `Ok(())` if every rule holds:
+    ///
+    /// - `delta.removed` is strictly increasing by id, and every id exists
+    ///   in `self.root` (no stale removals).
+    /// - `delta.upserted` is strictly increasing by id, and every leaf differs
+    ///   from the current state at that id (no no-op upserts).
+    /// - `delta.removed` and `delta.upserted` have no id in common.
+    ///
+    /// Honest deltas produced by `recalculate()`, `calculate_delta()`, and
+    /// `pending_changes()` satisfy these by construction via the SMT diff
+    /// walk. Adversarial wire-form variants are rejected here so that the
+    /// postcard byte string accepted by `apply_delta` is the unique encoding
+    /// of the transition.
+    fn validate_canonical_delta(&self, delta: &Delta) -> Result<(), OrgMembersError> {
+        use core::cmp::Ordering;
+
+        // removed: strictly increasing, every id present.
+        for pair in delta.removed.windows(2) {
+            if pair[0] >= pair[1] {
+                return Err(OrgMembersError::MalformedDelta(
+                    "removed not strictly increasing",
+                ));
+            }
+        }
+        for id in &delta.removed {
+            if smt::get_member(&self.root, id).is_none() {
+                return Err(OrgMembersError::MalformedDelta(
+                    "removed id not present in trie",
+                ));
+            }
+        }
+        // upserted: strictly increasing, each leaf produces an observable change.
+        for pair in delta.upserted.windows(2) {
+            if pair[0].id() >= pair[1].id() {
+                return Err(OrgMembersError::MalformedDelta(
+                    "upserted not strictly increasing by id",
+                ));
+            }
+        }
+        for leaf in &delta.upserted {
+            if let Some(existing) = smt::get_member(&self.root, leaf.id()) {
+                if &existing == leaf {
+                    return Err(OrgMembersError::MalformedDelta(
+                        "upserted leaf identical to existing trie state",
+                    ));
+                }
+            }
+        }
+        // removed and upserted disjoint (two-pointer merge over sorted ids).
+        let mut ri = 0;
+        let mut ui = 0;
+        while ri < delta.removed.len() && ui < delta.upserted.len() {
+            match delta.removed[ri].cmp(delta.upserted[ui].id()) {
+                Ordering::Less => ri += 1,
+                Ordering::Greater => ui += 1,
+                Ordering::Equal => {
+                    return Err(OrgMembersError::MalformedDelta(
+                        "id appears in both removed and upserted",
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Applies a received delta. Returns CandidateTrie (must verify before use).
+    ///
+    /// Rejects deltas that are not in canonical form (H-1):
+    /// - `removed` MUST be strictly increasing by id; every id MUST exist in the trie.
+    /// - `upserted` MUST be strictly increasing by id; every leaf MUST produce an
+    ///   observable change vs. the current trie state at that id.
+    /// - `removed` and `upserted` MUST be disjoint.
+    ///
+    /// Together these guarantee that the postcard byte string of an accepted
+    /// `Delta` is the unique encoding for the transition from `base_root` to
+    /// the resulting root. See `docs/superpowers/specs/2026-05-28-org-members-
+    /// hyperbridge-review.md` for the threat model.
     pub fn apply_delta(&self, delta: &Delta) -> Result<CandidateTrie<H>, OrgMembersError> {
         let current_root = self
             .cached_root_hash
@@ -406,36 +502,34 @@ impl<H: TrieHasher> OrgTrie<H> {
             return Err(OrgMembersError::DeltaBaseMismatch);
         }
 
+        self.validate_canonical_delta(delta)?;
+
+        // --- Apply (every operation is now guaranteed meaningful) ---
         let mut root = self.root.clone();
         let mut count = self.member_count;
         let mut new_skeleton_index = self.skeleton_index.clone();
         let mut new_handle_index = self.handle_index.clone();
 
-        // Remove: only decrement count if the member was actually present.
         for id in &delta.removed {
-            if let Some(existing) = smt::get_member(&root, id) {
-                new_skeleton_index.remove(&handle_skeleton(existing.handle()));
-                new_handle_index.remove(existing.handle());
-                root = smt::remove(&root, id, &self.defaults);
-                count -= 1;
-            }
+            // Existence verified in validate_canonical_delta; the lookup here is
+            // to extract the handle/skeleton for index maintenance.
+            let existing = smt::get_member(&root, id).ok_or(OrgMembersError::InvariantViolated)?;
+            new_skeleton_index.remove(&handle_skeleton(existing.handle()));
+            new_handle_index.remove(existing.handle());
+            root = smt::remove(&root, id, &self.defaults);
+            count = count.checked_sub(1).ok_or(OrgMembersError::InvariantViolated)?;
         }
 
-        // Upsert: check confusable handles for BOTH new inserts and existing-id updates.
-        // For an existing-id update with a different handle, we must remove the old
-        // skeleton entry before checking the new one.
         for member in &delta.upserted {
             let existing = smt::get_member(&root, member.id());
 
             if let Some(ref old) = existing {
                 if old.handle() != member.handle() {
-                    // Handle changed -- remove old skeleton/handle index entries first
                     new_skeleton_index.remove(&handle_skeleton(old.handle()));
                     new_handle_index.remove(old.handle());
                 }
             }
 
-            // Check the upserted handle is unique (unless unchanged for existing member)
             let needs_check = match &existing {
                 Some(old) => old.handle() != member.handle(),
                 None => true,
@@ -456,7 +550,7 @@ impl<H: TrieHasher> OrgTrie<H> {
 
             root = smt::insert::<H>(&root, member.clone(), &self.defaults);
             if existing.is_none() {
-                count += 1;
+                count = count.checked_add(1).ok_or(OrgMembersError::InvariantViolated)?;
             }
         }
 

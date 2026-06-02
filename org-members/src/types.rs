@@ -20,6 +20,14 @@ pub const MAX_DEVICES: usize = 4;
 /// non-ASCII handles after NFC expansion.
 pub const MAX_HANDLE_LEN: usize = 128;
 
+/// Maximum byte length of `name` after NFC normalization. Matches
+/// `MAX_HANDLE_LEN` and is generous for typical names (KYC standards
+/// cap at 50–100 chars; 128 bytes accommodates non-ASCII expansion).
+pub const MAX_NAME_LEN: usize = 128;
+
+/// Maximum byte length of `surname` after NFC normalization. See `MAX_NAME_LEN`.
+pub const MAX_SURNAME_LEN: usize = 128;
+
 /// Immutable member identifier. Used as the SMT key and as a stable reference
 /// to a member regardless of changes to their handle or p2p key.
 ///
@@ -306,7 +314,9 @@ impl fmt::Debug for RootHash {
 }
 
 /// Device slots for a member. Fixed depth-2 sub-trie (max 4 devices).
-/// Devices are ed25519 public keys, stored sorted.
+/// Devices are ed25519 public keys, stored sorted and deduplicated.
+/// The serde wire form is canonical (strictly increasing); non-canonical
+/// encodings are rejected on deserialize.
 #[derive(Clone, PartialEq, Eq)]
 pub struct P2pDeviceSlots {
     slots: Vec<P2pDeviceKey>,
@@ -323,11 +333,21 @@ impl serde::Serialize for P2pDeviceSlots {
 impl<'de> serde::Deserialize<'de> for P2pDeviceSlots {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let slots = Vec::<P2pDeviceKey>::deserialize(d)?;
-        // Re-run constructor validation so an attacker-supplied wire format
-        // cannot bypass invariants: exceeds MAX_DEVICES, duplicates. Empty
-        // is allowed (isolated state, see P2pDeviceSlots::new). Unsorted wire
-        // input is silently normalized into canonical sorted form.
-        P2pDeviceSlots::new(slots).map_err(serde::de::Error::custom)
+        // Reject (do not normalize) non-canonical wire forms so postcard bytes
+        // have a unique encoding per logical device set. See Hyperbridge S1-16
+        // (proof canonicality) and review finding H-2.
+        if slots.len() > MAX_DEVICES {
+            return Err(serde::de::Error::custom("device slots exceed MAX_DEVICES"));
+        }
+        for pair in slots.windows(2) {
+            if pair[0] >= pair[1] {
+                return Err(serde::de::Error::custom(
+                    "device slots must be strictly increasing (sorted, no duplicates)",
+                ));
+            }
+        }
+        // Empty is still allowed (isolated state).
+        Ok(Self { slots })
     }
 }
 
@@ -461,9 +481,18 @@ impl<'de> serde::Deserialize<'de> for MemberLeaf {
         // restrictions. `validate_handle` also returns the NFC-normalized form,
         // so the stored handle is canonical even if the wire payload wasn't.
         let validated_handle = validate_handle(&raw.handle).map_err(serde::de::Error::custom)?;
-        // Normalize name and surname to NFC for hash determinism.
         let name = to_nfc(&raw.name);
+        if name.len() > MAX_NAME_LEN {
+            return Err(serde::de::Error::custom(
+                OrgMembersError::FieldTooLong { field: "name", max: MAX_NAME_LEN },
+            ));
+        }
         let surname = to_nfc(&raw.surname);
+        if surname.len() > MAX_SURNAME_LEN {
+            return Err(serde::de::Error::custom(
+                OrgMembersError::FieldTooLong { field: "surname", max: MAX_SURNAME_LEN },
+            ));
+        }
         Ok(Self {
             id: raw.id,
             handle: validated_handle,
@@ -494,13 +523,21 @@ impl MemberLeaf {
             return Err(OrgMembersError::EmptyDeviceList);
         }
         let validated_handle = validate_handle(handle)?;
+        let nfc_name = to_nfc(name);
+        if nfc_name.len() > MAX_NAME_LEN {
+            return Err(OrgMembersError::FieldTooLong { field: "name", max: MAX_NAME_LEN });
+        }
+        let nfc_surname = to_nfc(surname);
+        if nfc_surname.len() > MAX_SURNAME_LEN {
+            return Err(OrgMembersError::FieldTooLong { field: "surname", max: MAX_SURNAME_LEN });
+        }
         let device_slots = P2pDeviceSlots::new(p2p_devices)?;
         Ok(Self {
             id,
             handle: validated_handle,
             p2p_key,
-            name: to_nfc(name),
-            surname: to_nfc(surname),
+            name: nfc_name,
+            surname: nfc_surname,
             p2p_devices: device_slots,
         })
     }

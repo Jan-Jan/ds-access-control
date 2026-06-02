@@ -43,4 +43,10 @@ pub enum OrgMembersError {
 
     #[error("internal invariant violated")]
     InvariantViolated,
+
+    #[error("malformed delta: {0}")]
+    MalformedDelta(&'static str),
+
+    #[error("field too long: {field} exceeds {max} bytes after NFC normalization")]
+    FieldTooLong { field: &'static str, max: usize },
 }
