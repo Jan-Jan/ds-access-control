@@ -1,0 +1,42 @@
+[package]
+name = "spike-keyhive"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0-only"
+description = "Phase 1.d qualification spike for the Keyhive (Ink & Switch) local-first stack"
+publish = false
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+spike-common = { path = "../spike-common" }
+ed25519-dalek = { version = "2", default-features = false, features = ["alloc"] }
+thiserror = "1"
+nonempty = "0.10"
+
+keyhive_crypto = { git = "https://github.com/inkandswitch/keyhive", rev = "a2876f3c79d89c9dd0c5e9f84802611c716fe27e", default-features = false }
+beekem         = { git = "https://github.com/inkandswitch/keyhive", rev = "a2876f3c79d89c9dd0c5e9f84802611c716fe27e", default-features = false }
+keyhive_core   = { git = "https://github.com/inkandswitch/keyhive", rev = "a2876f3c79d89c9dd0c5e9f84802611c716fe27e" }
+
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync"] }
+futures = "0.3"
+future_form = "0.3.1"
+rand = "0.8"
+
+[dev-dependencies]
+serde_json = "1"
+nonempty = "0.10"
+blake3 = "1"
+dupe = "0.9"
+
+# WASM target needs js-feature for getrandom 0.2 (via x25519-dalek, ed25519-dalek).
+# keyhive_crypto uses rand_chacha 0.3 (via rand 0.8) which pulls getrandom 0.2,
+# unlike p2panda-encryption which pulls getrandom 0.3 via rand_chacha 0.9.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+
+[lints]
+workspace = true

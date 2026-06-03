@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>p2panda library qualification — ODS Phase 1.d spike report</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #555;
+    --bg: #fafafa;
+    --accent: #1a5fb4;
+    --hard: #c01c28;
+    --soft: #b58900;
+    --none: #2ec27e;
+    --rule: #ddd;
+    --code-bg: #f1f1f1;
+    --table-stripe: #f5f5f5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 0;
+  }
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 40px 32px 60px;
+    background: white;
+    border-left: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
+  }
+  header.doc {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 16px;
+    margin-bottom: 32px;
+  }
+  header.doc h1 { margin: 0 0 4px; font-size: 26px; color: var(--accent); }
+  header.doc .subtitle { color: var(--muted); margin: 0; }
+  header.doc .meta {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  h2 {
+    font-size: 20px;
+    margin: 36px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--accent);
+  }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  h4 { font-size: 14px; margin: 16px 0 6px; color: var(--muted); }
+  p { margin: 8px 0; }
+  ul, ol { padding-left: 24px; margin: 8px 0; }
+  li { margin: 4px 0; }
+  code, kbd {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12.5px;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 12px 14px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.4;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th { background: #eee; font-weight: 600; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  .sev-hard { color: var(--hard); font-weight: 600; }
+  .sev-soft { color: var(--soft); font-weight: 600; }
+  .sev-none { color: var(--none); font-weight: 600; }
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: #eef4fb;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .callout.warn { border-left-color: var(--hard); background: #fbeeee; }
+  .callout.note { border-left-color: var(--soft); background: #fcf6e6; }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .toc {
+    background: #f4f4f4;
+    padding: 12px 16px 12px 36px;
+    border-radius: 4px;
+    margin-bottom: 24px;
+  }
+  .toc ol { margin: 4px 0; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .summary-card {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 12px;
+    background: var(--bg);
+  }
+  .summary-card h4 { margin: 0 0 6px; color: var(--fg); }
+  .summary-card .big {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: 12px;
+  }
+  @media print {
+    body { background: white; }
+    main { border: none; max-width: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header class="doc">
+  <h1>p2panda library qualification</h1>
+  <p class="subtitle">ODS Phase 1.d — spike findings report</p>
+  <p class="meta">
+    Pinned revision: <code>41559b0dfc2d7d0e9e4fba251ceb7f8094ff8be1</code> (main, 2026-05-20)<br>
+    Spike branch: <code>worktree-spike-phase-1d</code> · 14 commits<br>
+    Test count: 129 passing across the workspace · Build matrix: green<br>
+    Report date: 2026-05-28 (head-to-head context added 2026-06-03)
+  </p>
+</header>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#methodology">Methodology and ground rules</a></li>
+    <li><a href="#part-1">Part 1 — Findings without WASM requirement</a></li>
+    <li><a href="#part-2">Part 2 — Findings with WASM requirement</a></li>
+    <li><a href="#integration-findings">Integration findings (cross-cutting)</a></li>
+    <li><a href="#gap-matrix">Full gap matrix</a></li>
+    <li><a href="#evidence-map">Evidence map</a></li>
+    <li><a href="#recommendations">Recommendations for Phase 3</a></li>
+  </ol>
+</nav>
+
+<!-- =========================================================== -->
+<section id="summary">
+<h2>1. Summary</h2>
+
+<p>
+  The spike confirms p2panda is a viable substrate for ODS, with caveats that are
+  bounded and locally fixable. All six substitutions the design requires can be
+  reproduced in working code without modifying p2panda's source — except for one
+  narrow visibility issue at <code>p2panda-spaces</code>, and (if WASM is required)
+  one transport-layer dependency at <code>p2panda-sync</code>.
+</p>
+
+<div class="summary-grid">
+  <div class="summary-card">
+    <h4>Without WASM requirement</h4>
+    <div class="big">Burden 20</div>
+    <p>4 Hard rows, 6 Soft rows. One small fork covers 3 of the 4 Hard rows
+    (single <code>pub use</code> patch in <code>p2panda-spaces</code>). The
+    remaining Hard is a clean <code>TraitImpl</code> already implemented in
+    the spike.</p>
+  </div>
+  <div class="summary-card">
+    <h4>With WASM requirement</h4>
+    <div class="big">Burden 32</div>
+    <p>Adds gate 0 (compile to <code>wasm32-unknown-unknown</code>). 5 sub-crates
+    pass; <code>p2panda-sync</code> requires a Large fork — swap <code>tokio</code>
+    for <code>tokio_with_wasm</code>. This is the largest single item of work.</p>
+  </div>
+  <div class="summary-card">
+    <h4>Test coverage</h4>
+    <div class="big">129 / 129</div>
+    <p>L1 (per-sub-crate), L2 (per-gate integrated), and L3 (per-scenario
+    end-to-end) all green. Three scenarios from the design's §Data flow are
+    exercised through the composed substitutions.</p>
+  </div>
+  <div class="summary-card">
+    <h4>Substitution shape</h4>
+    <div class="big">~600 LOC</div>
+    <p>Five gate modules in <code>spike-p2panda/src/sN_*.rs</code> totalling
+    about 600 lines. All gate code uses public p2panda APIs at the pinned
+    revision; no upstream modifications.</p>
+  </div>
+</div>
+
+<div class="callout">
+  <p><strong>Per-library qualification.</strong> p2panda is qualified as a
+  viable phase-3 substrate. The decision is straightforward without the WASM
+  requirement; with WASM it carries one Large fork of <code>p2panda-sync</code>,
+  which is real but not architecturally blocking.</p>
+</div>
+
+<div class="callout note">
+  <p><strong>Head-to-head outcome (2026-06-03).</strong> The consolidated
+  Phase 1.d decision (<a href="decision.md"><code>decision.md</code></a>)
+  picks <strong>Keyhive</strong> as the primary substrate per the
+  hard-blocker rule (Keyhive 1 Hard vs p2panda 5 Hard) confirmed by
+  override-on-cost (burden 22 vs 32). p2panda is retained as the documented
+  salvage alternative if Keyhive fails its maturity gate; the per-library
+  findings in this report constitute that salvage plan's evidence base.</p>
+  <p>The ODS <strong>lazy-CGKA / two-tier design</strong> commitment
+  (<a href="lazy-cgka-results.md"><code>lazy-cgka-results.md</code></a>)
+  applies symmetrically to p2panda: a phase-3 wiring on p2panda would
+  also descend below <code>p2panda_spaces::Manager::add_member</code> to
+  <code>GroupCrdt</code> + <code>Dcgka::*</code> directly so the trie
+  carries only long-term keys, not <code>KeyBundle</code>s at add-time.
+  Both libraries support the lower-level composition; the burden
+  estimates in this report assume that descent is taken.</p>
+</div>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="methodology">
+<h2>2. Methodology and ground rules</h2>
+
+<h3>Six gates evaluated</h3>
+<p>
+  The spike exercises the six gates defined in the
+  <a href="../superpowers/specs/2026-05-13-ods-phase-1d-library-qualification-design.md">design
+  document</a>:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Gate</th><th>What it tests</th><th>Spec mapping</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td>Each p2panda sub-crate compiles to <code>wasm32-unknown-unknown</code> under <code>no_std + alloc + serde</code></td>
+      <td>Workspace convention (matches <code>org-members</code>)</td>
+    </tr>
+    <tr>
+      <td>1</td>
+      <td>ACL entries reference stable <code>MemberId</code>, not raw <code>VerifyingKey</code>; resolver materialises the key at use time</td>
+      <td>§Key changes #1; phase 1.d (a)</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Library-native membership-mutation ops (<code>add</code>/<code>remove</code>) are disabled or intercepted; the trie is the sole write authority</td>
+      <td>§Key changes #3; phase 1.d (c)</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>(D)CGKA / member-as-a-group key rotation is driven by trie change, not by an internal library cache</td>
+      <td>§Key changes #4; phase 1.d (b)</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Organisation-as-pseudo-group is expressible as an ACL principal — any current member acts as the org</td>
+      <td>§Key changes #2 (scope expansion vs phase 1.d wording)</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Peer-to-peer connection policy consults the trie at session-establish time and on trie change</td>
+      <td>§Key changes #5 (scope expansion)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Three test levels</h3>
+<p>Per the design's layered test pyramid, every gate is exercised at three levels:</p>
+<ul>
+  <li><strong>L1</strong> — per sub-crate. Tests the substitution against the smallest
+  p2panda crate that owns the primitive. Locates failures to a specific sub-crate.</li>
+  <li><strong>L2</strong> — per gate, integrated. Exercises the substitution through
+  the library's normal composition.</li>
+  <li><strong>L3</strong> — per scenario. End-to-end fixtures (revocation, gating,
+  org-pseudo-group) composing multiple gates.</li>
+</ul>
+
+<h3>Severity classifications</h3>
+<table>
+  <thead>
+    <tr><th>Severity</th><th>Meaning</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="sev-none">None</span></td>
+      <td>The substitution composes cleanly via existing public p2panda APIs.</td>
+    </tr>
+    <tr>
+      <td><span class="sev-soft">Soft</span></td>
+      <td>Implementable with an adapter or wrapper that conforms to a public trait. Phase-3 friction is documented but bounded.</td>
+    </tr>
+    <tr>
+      <td><span class="sev-hard">Hard</span></td>
+      <td>The library's relevant primitive is private or sealed against the extension point needed. A salvage path (fork, replace, or trait-impl) is required.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Salvage path policy</h3>
+<div class="callout note">
+  <p><strong>Project policy:</strong> No upstream PRs to p2panda are proposed for
+  Phase 1.d. The salvage path for every Hard row is either a local fork or a
+  trait implementation in spike-p2panda. Upstream contribution will be
+  reconsidered after the spike demonstrates value
+  (<code>project_p2panda_fork_policy</code>, 2026-05-28).</p>
+</div>
+
+<h3>Effort accounting</h3>
+<p>The burden number combines two estimates per row:</p>
+<ul>
+  <li><strong>Phase 3 effort</strong> — work to integrate the substitution into a production stack.</li>
+  <li><strong>Fix effort</strong> — work to implement the salvage (fork patch, trait impl, replacement).</li>
+</ul>
+<p>Effort weights: <code>Small</code> = 1, <code>Medium</code> = 3, <code>Large</code> = 9, <code>XL</code> = 81 (super-linear; penalises one big gap more than several small ones).</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="part-1">
+<h2>3. Part 1 — Findings without WASM requirement</h2>
+
+<p>
+  If WASM compatibility is not a hard requirement for Phase 3, gate 0 is dropped.
+  The remaining gates 1–5 yield <strong>4 Hard + 6 Soft rows, total burden 20</strong>.
+  Three of the four Hard rows share a single root cause and a single one-line fork
+  patch in <code>p2panda-spaces</code>.
+</p>
+
+<h3 id="g1">Gate 1 — Stable-ID ACL with trie-lookup resolver</h3>
+
+<table>
+  <tr><th>Sub-flow</th><th>Principal</th><th>Severity</th><th>Failing subcrate</th><th>Fix path</th><th>Effort</th></tr>
+  <tr><td>A (delegation)</td><td>Member</td><td><span class="sev-hard">Hard</span></td><td><code>p2panda-spaces</code></td><td><code>TraitImpl</code></td><td>Small</td></tr>
+</table>
+
+<p><strong>What was found.</strong> Severity is split between the two layers:</p>
+<ul>
+  <li>At <code>p2panda-auth</code>: <span class="sev-none">None</span>.
+  <code>GroupCrdt&lt;ID, …&gt;</code> is fully generic over <code>ID: IdentityHandle</code>;
+  <code>MemberId</code> satisfies the bound; ACL serialises opaque ID bytes
+  (CBOR round-trip confirms <code>[0xa1; 32]</code> patterns, no ed25519 key material).</li>
+  <li>At <code>p2panda-spaces</code>: <span class="sev-hard">Hard</span>.
+  <code>Group::add</code> / <code>Space::add</code> accept only <code>ActorId</code>
+  (a newtype over <code>VerifyingKey</code>) concretely; <code>Manager&lt;ID, …&gt;</code>'s
+  <code>ID</code> generic is the space identifier, not the member identifier.</li>
+</ul>
+
+<p><strong>Salvage already implemented in the spike</strong>
+(<code>spike-p2panda/src/s1_stable_id_acl.rs</code>, ~40 functional lines):</p>
+<ul>
+  <li><code>materialise_actor_id(resolver, principal) -> Result&lt;ActorId, _&gt;</code> —
+  the spaces-layer wrapper. Resolves a <code>Principal</code> to a freshly-materialised
+  <code>ActorId</code> at call time. If the resolver's mapping changes, the next call
+  returns the new key.</li>
+  <li><code>ResolverPki&lt;R&gt;</code> — implements <code>p2panda-encryption</code>'s
+  <code>IdentityRegistry&lt;MemberId, ResolverPki&lt;R&gt;&gt;</code>. This is the
+  encryption-layer adapter, reused by gate 3.</li>
+</ul>
+
+<p><strong>Positive surprise.</strong> <code>From&lt;VerifyingKey&gt; for ActorId</code> is
+public — the wrapper is one call, not a workaround.</p>
+
+<p><strong>Escape hatch.</strong> <code>IdentityRegistry::identity_key</code> is a
+static method (no <code>&amp;self</code>). The resolver is threaded via the <code>Y</code>
+type parameter, instantiated as <code>ResolverPki&lt;R&gt;</code>. Unconventional but
+valid; alternative is to fork <code>p2panda-encryption</code> to change the receiver
+to <code>&amp;self</code> (deferred under the fork-locally policy).</p>
+
+<p><strong>Evidence:</strong>
+<code>spike-p2panda/tests/l1_p2panda_auth.rs</code>,
+<code>spike-p2panda/tests/l1_p2panda_spaces.rs</code>,
+<code>spike-p2panda/tests/l2_g1.rs</code>,
+<code>spike-p2panda/src/evidence/s1.md</code>.</p>
+
+<h3 id="g2">Gate 2 — Library-native membership-mutation interception</h3>
+
+<table>
+  <tr><th>Sub-flow</th><th>Principal</th><th>Severity</th><th>Failing subcrate</th><th>Fix path</th><th>Effort</th></tr>
+  <tr><td>D (op interception)</td><td>N/A</td><td><span class="sev-hard">Hard</span></td><td><code>p2panda-spaces</code></td><td><code>Fork</code></td><td>Small</td></tr>
+</table>
+
+<p><strong>What was found.</strong> Again split by layer:</p>
+<ul>
+  <li>At <code>p2panda-auth</code>: <span class="sev-none">None</span>. The
+  <code>Groups</code> trait is public and externally implementable.
+  <code>BlockingGroups&lt;Inner&gt;</code> (in
+  <code>spike-p2panda/src/s2_membership_intercept.rs</code>) wraps any <code>Groups</code>
+  impl and returns <code>Err(MutationBlocked)</code> on all six mutation methods.</li>
+  <li>At <code>p2panda-spaces</code>: <span class="sev-hard">Hard</span>. The
+  <code>AuthStore&lt;C&gt;</code> trait is exported as public, but its parameter
+  type <code>AuthGroupState&lt;C&gt;</code> uses <code>AuthMessage&lt;C&gt;</code>
+  from a private module. The trait is externally <em>visible</em> but not externally
+  <em>implementable</em>. Compile error <code>E0603</code> confirmed.</li>
+</ul>
+
+<div class="callout warn">
+  <p><strong>Salvage:</strong> a one-line fork of <code>p2panda-spaces</code>. Add:</p>
+  <pre><code>pub use types::AuthGroupState;</code></pre>
+  <p>to expose the type. This single patch unblocks gates 2, 4A, and 4C (same root cause).</p>
+</div>
+
+<p><strong>Evidence:</strong>
+<code>spike-p2panda/tests/l1_p2panda_auth_intercept.rs</code>,
+<code>spike-p2panda/tests/l2_g2.rs</code>,
+<code>spike-p2panda/src/evidence/s2.md</code>.</p>
+
+<h3 id="g3">Gate 3 — (D)CGKA recompute on trie key change</h3>
+
+<table>
+  <tr><th>Sub-flow</th><th>Principal</th><th>Severity</th><th>Failing subcrate</th><th>Fix path</th><th>Effort</th></tr>
+  <tr><td>B (compute)</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+  <tr><td>C (recompute on rotation)</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+</table>
+
+<p><strong>What was found.</strong> Full DCGKA flow demonstrated:</p>
+<ul>
+  <li><strong>Flow B (compute).</strong> <code>Dcgka::create</code> + <code>Dcgka::process</code>
+  succeed with <code>KeyRegistry&lt;DcgkaMemberId&gt;</code> as the <code>PKI</code> generic.
+  Alice and Bob derive an identical <code>GroupSecret</code>.</li>
+  <li><strong>Flow C (recompute on rotation).</strong>
+  <code>trigger_recompute</code> (in <code>s3_cgka_rotation.rs</code>) drives
+  <code>Dcgka::update</code> after re-populating the <code>KeyRegistry</code> from the
+  resolver. Epoch 0 ≠ epoch 1; the new shared secret cannot be derived from the
+  pre-rotation key.</li>
+</ul>
+
+<p><strong>Important architectural finding.</strong> <code>ResolverPki&lt;R&gt;</code>
+(from gate 1) cannot serve directly as the <code>PKI</code> generic, because the
+DCGKA state requires <code>PKI</code> to be <code>Serialize + Deserialize</code>
+and to hold pre-key bundles. The correct integration pattern is:</p>
+<ol>
+  <li>Use <code>KeyRegistry&lt;MemberId&gt;</code> as the concrete PKI state.</li>
+  <li>Populate it <em>from</em> the resolver at group setup and at rotation time.</li>
+  <li>Drive <code>Dcgka::update</code> via <code>trigger_recompute</code> after re-population.</li>
+</ol>
+
+<p><strong>Escape hatches.</strong> <code>DcgkaMemberId</code> newtype (orphan rule);
+<code>DcgkaError</code> requires <code>ID: Display</code>;
+<code>test_utils</code> feature needed for <code>KeyManager::init_and_generate_prekey</code>
+in test fixtures.</p>
+
+<p><strong>Evidence:</strong>
+<code>spike-p2panda/tests/l1_p2panda_encryption.rs</code>,
+<code>spike-p2panda/tests/l2_g3.rs</code>,
+<code>spike-p2panda/src/evidence/s3.md</code>.</p>
+
+<h3 id="g4">Gate 4 — Organisation-as-pseudo-group principal</h3>
+
+<table>
+  <tr><th>Sub-flow</th><th>Principal</th><th>Severity</th><th>Failing subcrate</th><th>Fix path</th><th>Effort</th></tr>
+  <tr><td>A (delegation)</td><td>Org</td><td><span class="sev-hard">Hard</span></td><td><code>p2panda-spaces</code></td><td><code>Fork</code></td><td>Small</td></tr>
+  <tr><td>C (recompute on rotation)</td><td>Org</td><td><span class="sev-hard">Hard</span></td><td><code>p2panda-spaces</code></td><td><code>Fork</code></td><td>Small</td></tr>
+</table>
+
+<p><strong>What was found.</strong></p>
+<ul>
+  <li>At <code>p2panda-auth</code>: <span class="sev-none">None</span> (positive surprise).
+  <code>GroupMember::Group(ID)</code> is accepted by <code>GroupCrdt::process</code>;
+  <code>members()</code> <strong>auto-resolves nested groups</strong> — no manual
+  walker required in phase 3.</li>
+  <li>At <code>p2panda-spaces</code>: <span class="sev-hard">Hard</span>. Same root cause as
+  gate 2 (private type). The spike implements <code>OrgPseudoGroupAdapter</code> and
+  <code>effective_member_keys</code> at the auth layer, bypassing the spaces-layer
+  API for org-keyed flows.</li>
+</ul>
+
+<p><strong>Documented constraint.</strong> <code>GroupMember::Group</code> with
+<code>Access::manage()</code> is rejected by the CRDT
+(<code>ManagerGroupsNotAllowed</code>). Org pseudo-group entries must use
+<code>Read</code> or <code>Write</code> access; managerial actions stay with
+<code>Individual</code> members. This matches the ODS design (admin status is
+on-chain, not in the local-first ACL).</p>
+
+<p><strong>Salvage.</strong> Same one-line fork as gate 2 (covered transitively).</p>
+
+<p><strong>Evidence:</strong>
+<code>spike-p2panda/tests/l1_p2panda_auth.rs</code> (tests 4–6),
+<code>spike-p2panda/tests/l2_g4.rs</code>,
+<code>spike-p2panda/src/evidence/s4.md</code>.</p>
+
+<h3 id="g5">Gate 5 — Peer-to-peer connection policy</h3>
+
+<table>
+  <tr><th>Sub-flow</th><th>Principal</th><th>Severity</th><th>Failing subcrate</th><th>Fix path</th><th>Effort</th></tr>
+  <tr><td>E1 (accept/reject)</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+  <tr><td>E2 (accept/reject)</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+  <tr><td>F1 (termination on revocation)</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+  <tr><td>F2 (termination on org rotation)</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+</table>
+
+<p><strong>What was found.</strong> <code>PolicyManager&lt;R, F&gt;</code>
+(in <code>s5_p2p_policy.rs</code>) wraps the session-establish flow:</p>
+<ul>
+  <li><code>SessionConfig::remote: VerifyingKey</code> is available at session-open time —
+  this is the intercept hook.</li>
+  <li><code>policy_check(peer_key, doc_id)</code> consults the resolver via a closure
+  that maps <code>VerifyingKey → MemberId</code>.</li>
+  <li><code>recheck_open_sessions()</code> walks open sessions on trie change and
+  flags those whose remote device is no longer authorised.</li>
+</ul>
+
+<p>All four sub-flows pass with explicit acceptance / rejection / termination assertions.</p>
+
+<p><strong>Discovered gap in <code>spike-common</code>.</strong> The
+<code>MemberKeyResolver</code> trait has no reverse lookup
+(<code>VerifyingKey → MemberId</code>). The spike works around this with a closure
+parameter on <code>PolicyManager</code>. Phase 3 should add this method to the
+resolver trait (or formalise a <code>KeyIndex</code> companion).</p>
+
+<p><strong>Discovered gap — push notification.</strong>
+<code>recheck_open_sessions()</code> is a manual invocation. The
+<code>StubTrie</code> is pull-only; phase 3 needs either a push from the trie or
+a polling strategy.</p>
+
+<p><strong>Pre-open vs post-open termination.</strong> The policy check
+<em>accepts</em> or <em>rejects</em> at the session-establish moment (pre-open).
+For termination on trie change, the spike flags sessions for close after the
+trie observer fires; there is a small post-open window before the close actually
+propagates to the wire. The window is recorded as a phase-3 risk note.</p>
+
+<p><strong>Evidence:</strong>
+<code>spike-p2panda/tests/l1_p2panda_sync.rs</code>,
+<code>spike-p2panda/tests/l2_g5.rs</code>,
+<code>spike-p2panda/src/evidence/s5.md</code>.</p>
+
+<h3>Part 1 totals</h3>
+
+<table>
+  <tr><th>Severity</th><th>Count</th></tr>
+  <tr><td><span class="sev-hard">Hard</span></td><td>4 rows (1A, 2D, 4A, 4C)</td></tr>
+  <tr><td><span class="sev-soft">Soft</span></td><td>6 rows (3B, 3C, 5E1, 5E2, 5F1, 5F2)</td></tr>
+  <tr><td><strong>Total burden</strong></td><td><strong>20</strong></td></tr>
+</table>
+
+<p>
+  3 of the 4 Hard rows (gates 2, 4A, 4C) share a single root cause and resolve
+  with a one-line fork patch on <code>p2panda-spaces</code>. The 4th Hard (gate 1)
+  is already covered by the in-spike <code>TraitImpl</code>. The 6 Soft rows
+  represent Small-effort phase-3 work.
+</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="part-2">
+<h2>4. Part 2 — Findings with WASM requirement</h2>
+
+<p>
+  If WASM is a hard requirement (matching the <code>org-members</code> convention),
+  gate 0 is added. This is the single largest item of work.
+</p>
+
+<h3 id="g0">Gate 0 — WASM / no_std compile</h3>
+
+<table>
+  <tr><th>Sub-crate</th><th>Status</th><th>Notes</th></tr>
+  <tr>
+    <td><code>p2panda-core</code></td>
+    <td><span class="sev-none">PASS</span></td>
+    <td>Consumer adds <code>getrandom = { version = "0.2", features = ["js"] }</code> pin.</td>
+  </tr>
+  <tr>
+    <td><code>p2panda-auth</code></td>
+    <td><span class="sev-none">PASS</span></td>
+    <td>Same getrandom/js pin inherited.</td>
+  </tr>
+  <tr>
+    <td><code>p2panda-encryption</code></td>
+    <td><span class="sev-none">PASS</span></td>
+    <td>Needs an additional <code>getrandom = { version = "0.3", features = ["wasm_js"] }</code>
+    pin because <code>rand_chacha 0.9</code> pulls <code>getrandom 0.3</code>.</td>
+  </tr>
+  <tr>
+    <td><code>p2panda-spaces</code></td>
+    <td><span class="sev-none">PASS</span></td>
+    <td>Same dual getrandom pins (inherits from <code>p2panda-encryption</code>).</td>
+  </tr>
+  <tr>
+    <td><code>p2panda-net</code></td>
+    <td><span class="sev-soft">PASS (<code>--no-default-features</code> only)</span></td>
+    <td>With <code>tokio_with_wasm</code>; re-enabling the <code>iroh_endpoint</code>,
+    <code>gossip</code>, <code>sync</code> features would be Hard (transport-layer std deps).</td>
+  </tr>
+  <tr>
+    <td><code>p2panda-sync</code></td>
+    <td><span class="sev-hard">FAIL</span></td>
+    <td><code>mio 1.2.0</code> (std-only I/O poller) reached via <code>tokio</code> with default features.</td>
+  </tr>
+</table>
+
+<p><strong>Salvage.</strong> Fork <code>p2panda-sync</code> locally. Replace the
+<code>tokio</code> dependency with <code>tokio_with_wasm</code> (a drop-in
+<code>tokio</code> shim for WASM targets) and re-export the public API unchanged.
+This is the largest single fork in the spike's phase-3 picture.</p>
+
+<p><strong>Effort:</strong> Large (estimated ~3 weeks of focused work, including
+testing on a real WASM consumer). XL only if the wider <code>iroh</code> stack
+must also reach WASM, which is out of scope for the spike.</p>
+
+<p><strong>Evidence:</strong>
+<code>docs/phase-1d/gate-0-results.md</code>,
+<code>spike-p2panda/src/evidence/s0_wasm.md</code>.</p>
+
+<h3>Part 2 totals</h3>
+
+<table>
+  <tr><th>Severity</th><th>Count</th></tr>
+  <tr><td><span class="sev-hard">Hard</span></td><td>5 rows (4 from Part 1 + gate 0)</td></tr>
+  <tr><td><span class="sev-soft">Soft</span></td><td>6 rows (unchanged from Part 1)</td></tr>
+  <tr><td><strong>Total burden</strong></td><td><strong>32</strong></td></tr>
+</table>
+
+<p>
+  WASM adds 12 burden points (1 Hard row, Medium phase-3 + Large fix effort).
+  This is a material increase but not architecturally blocking — the network
+  transport layer can be replaced (or supplemented) with a WASM-compatible
+  shim. The other five sub-crates already pass WASM with consumer-side
+  <code>getrandom</code> pins.
+</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="integration-findings">
+<h2>5. Integration findings (cross-cutting)</h2>
+
+<p>
+  These are findings discovered during the spike that affect more than one gate
+  and need explicit phase-3 follow-through.
+</p>
+
+<h3>5.1 <code>Dcgka::remove</code> vs <code>Dcgka::update</code> for revocation</h3>
+<p>
+  Gate 3's <code>trigger_recompute</code> wraps <code>Dcgka::update</code>. This is
+  correct for the <em>key-rotation</em> flow (Flow C). It is the <strong>wrong</strong>
+  operation for <em>membership revocation</em>: <code>Dcgka::update</code> sends
+  direct messages to every member listed in the DGM, including the member being
+  removed, breaking forward-security.
+</p>
+<p>
+  The correct DCGKA operation for revocation is <code>Dcgka::remove</code>, which
+  filters out the revoked member from the direct-message fan-out. The L3
+  revocation test uses <code>Dcgka::remove</code> directly.
+</p>
+<p>
+  <strong>Phase 3 implication:</strong> the trie-change observer must distinguish
+  rotation events from revocation events, and dispatch to the appropriate DCGKA
+  operation. Documented in <code>spike-p2panda/src/evidence/s3.md</code>.
+</p>
+
+<h3>5.2 Reverse lookup gap in <code>MemberKeyResolver</code></h3>
+<p>
+  Gate 5 requires mapping <code>VerifyingKey → MemberId</code> at session-establish
+  time, but the foundation <code>MemberKeyResolver</code> trait only goes the
+  other way. The spike resolves this with a closure injected into
+  <code>PolicyManager</code>. Phase 3 should formalise a <code>find_member_by_device(VerifyingKey)</code>
+  method on the resolver trait (or a sibling <code>KeyIndex</code>).
+</p>
+
+<h3>5.3 Trie push notification missing</h3>
+<p>
+  The <code>StubTrie</code> in spike-common is pull-only.
+  <code>recheck_open_sessions()</code> must be invoked manually. Phase 3 needs
+  either a push channel from the trie (e.g. a <code>tokio::sync::watch</code>) or
+  a polling strategy in the policy manager.
+</p>
+
+<h3>5.4 Pre-1.0 API instability</h3>
+<p>
+  The pinned p2panda revision (<code>41559b0</code>, 2026-05-20) was followed two
+  days later by API-renaming commits in <code>p2panda-spaces</code>. The spike's
+  findings are valid for the pinned revision; any phase-3 work must either
+  hold the pin or re-run the L1 battery against a newer commit.
+</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="gap-matrix">
+<h2>6. Full gap matrix</h2>
+
+<table>
+<thead>
+  <tr>
+    <th>Gate</th>
+    <th>Flow</th>
+    <th>Principal</th>
+    <th>Severity</th>
+    <th>Subcrate</th>
+    <th>Fix path</th>
+    <th>Fix effort</th>
+    <th>Phase 3 effort</th>
+  </tr>
+</thead>
+<tbody>
+  <tr><td>0</td><td>A</td><td>N/A</td><td><span class="sev-hard">Hard</span></td><td><code>p2panda-sync</code></td><td><code>Fork</code></td><td>Large</td><td>Medium</td></tr>
+  <tr><td>1</td><td>A</td><td>Member</td><td><span class="sev-hard">Hard</span></td><td><code>p2panda-spaces</code></td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+  <tr><td>2</td><td>D</td><td>N/A</td><td><span class="sev-hard">Hard</span></td><td><code>p2panda-spaces</code></td><td><code>Fork</code></td><td>Small</td><td>Small</td></tr>
+  <tr><td>3</td><td>B</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+  <tr><td>3</td><td>C</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+  <tr><td>4</td><td>A</td><td>Org</td><td><span class="sev-hard">Hard</span></td><td><code>p2panda-spaces</code></td><td><code>Fork</code></td><td>Small</td><td>Small</td></tr>
+  <tr><td>4</td><td>C</td><td>Org</td><td><span class="sev-hard">Hard</span></td><td><code>p2panda-spaces</code></td><td><code>Fork</code></td><td>Small</td><td>Small</td></tr>
+  <tr><td>5</td><td>E1</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+  <tr><td>5</td><td>E2</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+  <tr><td>5</td><td>F1</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+  <tr><td>5</td><td>F2</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+</tbody>
+</table>
+
+<p>The canonical machine-readable matrix is at
+<code>docs/phase-1d/gap-matrix.json</code>; the rendered markdown version is at
+<code>docs/phase-1d/gap-matrix.md</code>.</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="evidence-map">
+<h2>7. Evidence map</h2>
+
+<h3>Source code</h3>
+<ul>
+  <li><code>spike-p2panda/src/s1_stable_id_acl.rs</code> — gate 1
+  (<code>materialise_actor_id</code>, <code>ResolverPki</code>).</li>
+  <li><code>spike-p2panda/src/s2_membership_intercept.rs</code> — gate 2
+  (<code>BlockingGroups</code>).</li>
+  <li><code>spike-p2panda/src/s3_cgka_rotation.rs</code> — gate 3
+  (<code>DcgkaMemberId</code>, <code>LocalDgm</code>, <code>trigger_recompute</code>).</li>
+  <li><code>spike-p2panda/src/s4_org_pseudo_group.rs</code> — gate 4
+  (<code>OrgPseudoGroupAdapter</code>, <code>effective_member_keys</code>).</li>
+  <li><code>spike-p2panda/src/s5_p2p_policy.rs</code> — gate 5
+  (<code>PolicyManager</code>, <code>DocAcl</code>, <code>SessionRecord</code>).</li>
+</ul>
+
+<h3>Tests</h3>
+<ul>
+  <li>L1 — <code>spike-p2panda/tests/l1_p2panda_*.rs</code> (5 files).</li>
+  <li>L2 — <code>spike-p2panda/tests/l2_g{1..5}.rs</code> (5 files).</li>
+  <li>L3 — <code>spike-p2panda/tests/l3_{revocation,gating,org_pseudo_group}.rs</code> (3 files).</li>
+</ul>
+
+<h3>Evidence narratives</h3>
+<ul>
+  <li><code>spike-p2panda/src/evidence/s1.md</code> — gate 1 findings (3 sections: L1 auth, L1 spaces, L2 integrated).</li>
+  <li><code>spike-p2panda/src/evidence/s2.md</code> — gate 2 findings.</li>
+  <li><code>spike-p2panda/src/evidence/s3.md</code> — gate 3 findings including the <code>Dcgka::remove</code> integration finding.</li>
+  <li><code>spike-p2panda/src/evidence/s4.md</code> — gate 4 findings.</li>
+  <li><code>spike-p2panda/src/evidence/s5.md</code> — gate 5 findings including the resolver-trait gaps.</li>
+  <li><code>spike-p2panda/src/evidence/s0_wasm.md</code> — gate 0 summary.</li>
+  <li><code>docs/phase-1d/gate-0-results.md</code> — per-sub-crate WASM build matrix detail.</li>
+</ul>
+
+<h3>Spike-common foundation (unmodified during this spike)</h3>
+<ul>
+  <li><code>spike-common/src/identity.rs</code> — <code>MemberId</code>,
+  <code>P2pMemberKey</code>, <code>P2pDeviceKey</code>, <code>OrgKey</code>,
+  <code>Epoch</code>, <code>Principal</code>.</li>
+  <li><code>spike-common/src/resolver.rs</code> — <code>MemberKeyResolver</code> trait.</li>
+  <li><code>spike-common/src/stub_trie.rs</code> — in-memory <code>MemberKeyResolver</code> impl with mutators.</li>
+  <li><code>spike-common/src/scenarios.rs</code> — three fixture accessors (revocation, gating, org_pseudo_group).</li>
+</ul>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="recommendations">
+<h2>8. Recommendations for Phase 3</h2>
+
+<h3>If WASM is not required</h3>
+<ol>
+  <li><strong>Fork <code>p2panda-spaces</code> with one <code>pub use</code> patch.</strong>
+  Small effort. Unblocks gates 2, 4A, 4C.</li>
+  <li><strong>Adopt the spike's <code>TraitImpl</code> code as Phase 3 seed code.</strong>
+  The <code>~600 LOC</code> across <code>s1..s5_*.rs</code> is production-quality scaffolding.</li>
+  <li><strong>Extend <code>MemberKeyResolver</code></strong> with the reverse-lookup
+  method discovered in gate 5.</li>
+  <li><strong>Wire trie push notifications</strong> for the policy manager.</li>
+  <li><strong>Separate <code>Dcgka::remove</code> from <code>Dcgka::update</code></strong>
+  in the trie-change observer (substitution #4).</li>
+</ol>
+
+<h3>If WASM is required</h3>
+<p>Add to the above:</p>
+<ol start="6">
+  <li><strong>Fork <code>p2panda-sync</code></strong> to swap <code>tokio</code> for
+  <code>tokio_with_wasm</code>. Large effort. Plan for ~3 weeks plus integration
+  testing on a real WASM consumer (browser PWA).</li>
+  <li><strong>Pin the <code>getrandom</code> family</strong> at the consumer level
+  per gate-0 evidence. Two pins needed (0.2 with <code>js</code> and 0.3 with
+  <code>wasm_js</code>).</li>
+</ol>
+
+<h3>Independent of WASM</h3>
+<ul>
+  <li><strong>Hold the p2panda pin</strong> at <code>41559b0</code> through Phase 3.
+  Any newer commit must re-run the L1 battery — the upstream is pre-1.0 and APIs
+  rename.</li>
+  <li><strong>Schedule an independent security audit</strong> after Phase 3
+  integration, per the parent design's §Addendum. The
+  <code>p2panda-encryption</code> audit by Radically Open Security is a head-start;
+  the rest of the integrated stack remains unaudited.</li>
+</ul>
+
+</section>
+
+<footer>
+  <p>Generated 2026-05-28 from <code>worktree-spike-phase-1d</code> at commit <code>09e1a5f</code>.
+  Companion documents: <code>docs/phase-1d/gap-matrix.{md,json}</code>,
+  <code>docs/phase-1d/spike-p2panda-decision.md</code> (to follow),
+  parent design at <code>docs/superpowers/specs/2026-05-13-ods-phase-1d-library-qualification-design.md</code>.</p>
+</footer>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keyhive library qualification — ODS Phase 1.d spike report</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #555;
+    --bg: #fafafa;
+    --accent: #1a5fb4;
+    --hard: #c01c28;
+    --soft: #b58900;
+    --none: #2ec27e;
+    --rule: #ddd;
+    --code-bg: #f1f1f1;
+    --table-stripe: #f5f5f5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 0;
+  }
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 40px 32px 60px;
+    background: white;
+    border-left: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
+  }
+  header.doc {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 16px;
+    margin-bottom: 32px;
+  }
+  header.doc h1 { margin: 0 0 4px; font-size: 26px; color: var(--accent); }
+  header.doc .subtitle { color: var(--muted); margin: 0; }
+  header.doc .meta {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  h2 {
+    font-size: 20px;
+    margin: 36px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--accent);
+  }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  h4 { font-size: 14px; margin: 16px 0 6px; color: var(--muted); }
+  p { margin: 8px 0; }
+  ul, ol { padding-left: 24px; margin: 8px 0; }
+  li { margin: 4px 0; }
+  code, kbd {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12.5px;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 12px 14px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.4;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th { background: #eee; font-weight: 600; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  .sev-hard { color: var(--hard); font-weight: 600; }
+  .sev-soft { color: var(--soft); font-weight: 600; }
+  .sev-none { color: var(--none); font-weight: 600; }
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: #eef4fb;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .callout.warn { border-left-color: var(--hard); background: #fbeeee; }
+  .callout.note { border-left-color: var(--soft); background: #fcf6e6; }
+  .callout.win { border-left-color: var(--none); background: #eaf7f0; }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .toc {
+    background: #f4f4f4;
+    padding: 12px 16px 12px 36px;
+    border-radius: 4px;
+    margin-bottom: 24px;
+  }
+  .toc ol { margin: 4px 0; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .summary-card {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 12px;
+    background: var(--bg);
+  }
+  .summary-card h4 { margin: 0 0 6px; color: var(--fg); }
+  .summary-card .big {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: 12px;
+  }
+  @media print {
+    body { background: white; }
+    main { border: none; max-width: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header class="doc">
+  <h1>Keyhive library qualification</h1>
+  <p class="subtitle">ODS Phase 1.d — spike findings report</p>
+  <p class="meta">
+    Pinned revision: <code>a2876f3c79d89c9dd0c5e9f84802611c716fe27e</code> (main, 2026-05-22)<br>
+    Workspace: <code>0.0.0-alpha.3</code> · crates: <code>keyhive_crypto</code>, <code>beekem</code>, <code>keyhive_core</code><br>
+    Spike branch: <code>worktree-spike-phase-1d</code><br>
+    Report date: 2026-06-02 (revised 2026-06-03 after running-code milestone &amp; lazy-CGKA design commitment)
+  </p>
+</header>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#methodology">Methodology and ground rules</a></li>
+    <li><a href="#part-1">Part 1 — Findings without WASM requirement</a></li>
+    <li><a href="#part-2">Part 2 — Findings with WASM requirement</a></li>
+    <li><a href="#cross-cutting">Cross-cutting observations</a></li>
+    <li><a href="#gap-matrix">Full gap matrix (Keyhive rows)</a></li>
+    <li><a href="#evidence-map">Evidence map</a></li>
+    <li><a href="#recommendations">Recommendations for Phase 3</a></li>
+  </ol>
+</nav>
+
+<!-- =========================================================== -->
+<section id="summary">
+<h2>1. Summary</h2>
+
+<p>
+  The spike confirms Keyhive is a viable substrate for ODS with materially less
+  fork burden than p2panda. All six substitutions the design requires can be
+  reproduced against Keyhive's public APIs at the pinned revision without
+  modifying upstream source. Only one Hard row appears — the principal-ID
+  concreteness — and its salvage is a <strong>~30-line call-site adapter</strong>
+  inside spike-keyhive, with no fork required.
+</p>
+
+<div class="summary-grid">
+  <div class="summary-card">
+    <h4>Without WASM requirement</h4>
+    <div class="big">Burden 22</div>
+    <p>1 Hard row, 9 Soft rows. The Hard is gate 1 (call-site
+    <code>IdAdapter</code> already implementable in spike code). No fork
+    needed for any gate.</p>
+  </div>
+  <div class="summary-card">
+    <h4>With WASM requirement</h4>
+    <div class="big">Burden 22</div>
+    <p>Adds gate 0 (WASM/no_std). All three Keyhive sub-crates compile
+    cleanly to <code>wasm32-unknown-unknown</code> — gate 0 scores
+    <span class="sev-none">None</span> and contributes zero to the burden.</p>
+  </div>
+  <div class="summary-card">
+    <h4>Comparison vs p2panda</h4>
+    <div class="big">−31%</div>
+    <p>Keyhive's WASM burden is 22 vs p2panda's 32 (−10 points, −31%).
+    The largest single saving is gate 0 (zero forks vs one Large fork)
+    and the gate-4 org-as-pseudo-group (Soft vs Hard).</p>
+  </div>
+  <div class="summary-card">
+    <h4>Substitution shape</h4>
+    <div class="big">No forks</div>
+    <p>Every Keyhive gap is salvageable via <code>TraitImpl</code>: the
+    spike's <code>IdAdapter</code>, a containment wrapper, custom
+    listeners, and a session-policy stub. Pure consumer-side code.</p>
+  </div>
+</div>
+
+<div class="callout win">
+  <p><strong>Headline finding.</strong> Keyhive's principal model
+  (<code>Agent::Group(...)</code> as a first-class variant of <code>Agent</code>)
+  and CGKA primitive (<code>beekem::Cgka::add(id, pk, signer)</code>) accept the
+  spike's substitutions natively — no upstream gatekeeper. This produces a
+  fork-free integration path that p2panda cannot match at the pinned revision.</p>
+</div>
+
+<div class="callout note">
+  <p><strong>Caveat — alpha stability.</strong> Keyhive is workspace version
+  <code>0.0.0-alpha.3</code> and explicitly unaudited. The library is
+  cryptographically rigorous (BeeKEM is published research) but the public
+  Rust API surface is pre-1.0 and may change. Phase 3 must re-pin and
+  re-run the L1 battery before any production commit.</p>
+</div>
+
+<div class="callout">
+  <p><strong>Running-code update (2026-06-03).</strong> 24 tests pass in
+  <code>spike-keyhive/</code> covering every gate (18 lib + 2 L2 + 4 L3
+  scenarios: revocation, gating, org_pseudo_group, lazy_onboarding). The
+  ODS architecture commits to a <strong>lazy-CGKA / two-tier</strong>
+  design that operates below Keyhive's eager-add convenience API: the
+  trie publishes long-term <code>VerifyingKey</code> only; CGKA placement
+  is deferred to the new member's own client at come-online. The L3
+  <code>lazy_onboarding</code> test validates this end-to-end on first
+  run. Full design narrative:
+  <a href="lazy-cgka-results.md"><code>lazy-cgka-results.md</code></a>.</p>
+</div>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="methodology">
+<h2>2. Methodology and ground rules</h2>
+
+<h3>Spike scope</h3>
+<p>
+  The <code>spike-keyhive</code> effort started <strong>API-evidence-driven</strong>:
+  each gate finding is grounded in the exact public-API surface of Keyhive
+  at the pinned SHA, cited file-by-file in
+  <code>spike-keyhive/src/evidence/sN.md</code>.
+</p>
+<p>
+  A <strong>running-code milestone</strong> (2026-06-02) then converted
+  the analytical claims into 24 passing tests in <code>spike-keyhive/</code>
+  (18 lib + 2 L2 + 4 L3). The running-code path surfaced a high-level-API
+  observation (<code>Keyhive::add_member</code> requires a signed
+  <code>KeyOp</code>/<code>ContactCard</code> at add-time) which in turn
+  drove an ODS design commitment on 2026-06-03: the <strong>lazy-CGKA /
+  two-tier separation</strong> (see §5 cross-cutting and the focused
+  results in <a href="lazy-cgka-results.md"><code>lazy-cgka-results.md</code></a>).
+  Production composes <code>keyhive_core</code> delegation +
+  <code>beekem::Cgka</code> directly, bypassing the eager-add convenience
+  path; the L3 <code>lazy_onboarding</code> test validates the design's
+  semantics on first run (no integration finding surfaced).
+</p>
+<p>
+  Phase 3 should re-pin to a tagged Keyhive release and re-run the L1+L2+L3
+  battery against the new pin before production commit. The current
+  evidence is sufficient to score every gate with confidence at the
+  alpha pin.
+</p>
+
+<h3>Six gates evaluated</h3>
+<p>
+  The spike exercises the six gates defined in the
+  <a href="../superpowers/specs/2026-05-13-ods-phase-1d-library-qualification-design.md">design
+  document</a>:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Gate</th><th>What it tests</th><th>Spec mapping</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td>Each Keyhive sub-crate compiles to <code>wasm32-unknown-unknown</code></td>
+      <td>Workspace convention</td>
+    </tr>
+    <tr>
+      <td>1</td>
+      <td>ACL entries reference stable <code>MemberId</code>, not raw <code>VerifyingKey</code>; resolver materialises the key at use time</td>
+      <td>§Key changes #1; phase 1.d (a)</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Library-native membership-mutation ops are disabled or intercepted; the trie is the sole write authority</td>
+      <td>§Key changes #3; phase 1.d (c)</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>CGKA key rotation is driven by trie change, not by an internal library cache</td>
+      <td>§Key changes #4; phase 1.d (b)</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Organisation-as-pseudo-group is expressible as an ACL principal</td>
+      <td>§Key changes #2</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Peer-to-peer connection policy consults the trie at session-establish time and on trie change</td>
+      <td>§Key changes #5</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Severity, fix-path, and effort schema</h3>
+<p>Same as the p2panda report (see
+  <a href="spike-p2panda-report.html#methodology">§2 there</a> for the
+  rubric). Recapped briefly:</p>
+
+<ul>
+  <li><span class="sev-none">None</span> — substitution composes via existing
+  public APIs; no salvage needed.</li>
+  <li><span class="sev-soft">Soft</span> — implementable with an adapter or
+  wrapper conforming to a public trait/seam.</li>
+  <li><span class="sev-hard">Hard</span> — primitive is private or sealed
+  against the extension point needed; salvage requires fork, replace, or
+  trait-impl.</li>
+</ul>
+
+<p>Effort weights: <code>Small</code>=1, <code>Medium</code>=3, <code>Large</code>=9,
+<code>XL</code>=81 (super-linear).</p>
+
+<h3>Fork-locally policy applies</h3>
+<div class="callout note">
+  <p>Same policy as <code>spike-p2panda</code>: no upstream PRs to Keyhive
+  proposed at this phase. Salvage paths are <code>TraitImpl</code> or
+  <code>Fork</code> only. (No Keyhive gate requires a fork — every salvage
+  is a <code>TraitImpl</code> in spike-keyhive code.)</p>
+</div>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="part-1">
+<h2>3. Part 1 — Findings without WASM requirement</h2>
+
+<p>
+  If WASM compatibility is not a hard requirement for Phase 3, gate 0 is
+  dropped. The remaining gates 1–5 yield <strong>1 Hard + 9 Soft rows,
+  total burden 22</strong>. The single Hard row has an in-spike <code>TraitImpl</code>
+  salvage; no fork needed anywhere.
+</p>
+
+<h3 id="g1">Gate 1 — Stable-ID ACL with trie-lookup resolver</h3>
+
+<table>
+  <tr><th>Sub-flow</th><th>Principal</th><th>Severity</th><th>Failing subcrate</th><th>Fix path</th><th>Effort</th></tr>
+  <tr><td>A (delegation)</td><td>Member</td><td><span class="sev-hard">Hard</span></td><td><code>keyhive_core</code></td><td><code>TraitImpl</code></td><td>Small</td></tr>
+</table>
+
+<p><strong>What was found.</strong> Keyhive's principal types are concrete
+newtypes over <code>ed25519_dalek::VerifyingKey</code>:</p>
+
+<pre><code>// keyhive_core/src/principal/identifier.rs
+pub struct Identifier(pub ed25519_dalek::VerifyingKey);
+
+// keyhive_core/src/principal/individual/id.rs
+pub struct IndividualId(pub Identifier);
+
+// keyhive_core/src/principal/group/id.rs  (derive(From, Into))
+pub struct GroupId(pub(crate) Identifier);
+
+// keyhive_core/src/principal/document/id.rs  (derive(From, Into))
+pub struct DocumentId(pub(crate) Identifier);
+
+// keyhive_core/src/keyhive.rs
+pub async fn add_member(
+    &amp;self,
+    to_add: Agent&lt;F, S, T, L&gt;,        // accepts Individual, Group, Document, Active
+    resource: &amp;Membered&lt;F, S, T, L&gt;,
+    can: Access,
+    other_relevant_docs: &amp;[Arc&lt;Mutex&lt;Document&lt;F, S, T, L&gt;&gt;&gt;],
+) -&gt; Result&lt;AddMemberUpdate&lt;F, S, T, L&gt;, AddMemberError&gt;;
+</code></pre>
+
+<p>None of these types is generic in ID — the principal model is fixed at
+ed25519. The spike's salvage is the <strong>call-site IdAdapter</strong>
+in <code>spike-keyhive/src/adapter.rs</code>:</p>
+
+<pre><code>pub struct IdAdapter {
+    mapping: Arc&lt;Mutex&lt;HashMap&lt;MemberId, VerifyingKey&gt;&gt;&gt;,
+}
+impl IdAdapter {
+    pub fn resolve&lt;R: MemberKeyResolver&gt;(&amp;self, r: &amp;R, id: &amp;MemberId)
+        -&gt; Option&lt;VerifyingKey&gt; { /* cache + trie lookup */ }
+    pub fn invalidate(&amp;self, id: &amp;MemberId);
+    pub fn member_id_for(&amp;self, vk: &amp;VerifyingKey) -&gt; Option&lt;MemberId&gt;;
+}
+</code></pre>
+
+<p>
+  At every Keyhive call site that needs a principal, the spike resolves
+  <code>MemberId → VerifyingKey</code> via the adapter, wraps in
+  <code>Agent::Individual(IndividualId(Identifier(vk)), ...)</code>, and
+  calls <code>keyhive.add_member(agent, ...)</code>.
+</p>
+
+<p><strong>Positive structural detail.</strong> <code>Identifier</code>'s field
+is <code>pub</code> — spike code constructs it directly, no factory required.
+<code>GroupId</code> / <code>DocumentId</code> use <code>#[derive(From, Into)]</code>
+so cross-construction from <code>Identifier</code> is one call. This is
+materially cleaner than p2panda's <code>ActorId(pub(crate) VerifyingKey)</code>
+which required us to discover <code>From&lt;VerifyingKey&gt; for ActorId</code>
+as an alternative.</p>
+
+<p><strong>Rotation behaviour.</strong> The delegation log holds the raw
+<code>VerifyingKey</code> verbatim — when a <code>MemberId</code> rotates in
+the trie, existing delegations point at the old key. The spike resolves
+this by composing the adapter with gate 3: on a trie rotation event, the
+adapter is invalidated for the rotating <code>MemberId</code>, and
+<code>keyhive.force_pcs_update(doc)</code> is called to forward-secure the
+doc with the new key.</p>
+
+<p><strong>Why Hard (not Soft).</strong> Severity is rated against the
+data-model semantics, not the salvage shape. The principal type is concrete
+AND the delegation log holds raw keys, so without a rotation hook a
+<code>MemberId</code> rotation produces a stale delegation. The salvage works,
+but the underlying constraint is real, so Hard.</p>
+
+<p><strong>Running-code follow-up &amp; design pivot (2026-06-03).</strong>
+Implementing gate 1 as running Rust code surfaced that the high-level
+<code>Keyhive::add_member(Agent::Individual, ...)</code> path requires an
+<code>Individual</code>, which is constructed via <code>Individual::new(KeyOp)</code>
+from a signed prekey op (a <code>ContactCard</code>). An interim revision
+(briefly) raised <code>phase3_effort</code> to Medium because that would
+have required the trie to publish or sign ContactCards. ODS instead
+commits to a <strong>lazy-CGKA / two-tier</strong> design that operates
+below this convenience API — the trie publishes only the long-term
+<code>VerifyingKey</code>; ACL grant is a trie record; CGKA placement is
+performed by the new member's own client at come-online via
+<code>beekem::Cgka::add</code> directly. <code>phase3_effort</code>
+reverts to Small. The L3 <code>lazy_onboarding</code> test validates
+the design's semantics (BeeKEM forward security in the new-member
+direction; history transfer via plaintext re-transmission under the
+new epoch). Full design narrative:
+<a href="lazy-cgka-results.md"><code>lazy-cgka-results.md</code></a>.</p>
+
+<p><strong>Evidence:</strong> <code>spike-keyhive/src/evidence/s1.md</code>,
+<code>spike-keyhive/src/adapter.rs</code>,
+<code>spike-keyhive/src/s1_stable_id_acl.rs</code>,
+<code>spike-keyhive/tests/l2_g1.rs</code>,
+<code>spike-keyhive/tests/l3_lazy_onboarding.rs</code>.</p>
+
+<h3 id="g2">Gate 2 — Library-native membership-mutation interception</h3>
+
+<table>
+  <tr><th>Sub-flow</th><th>Principal</th><th>Severity</th><th>Failing subcrate</th><th>Fix path</th><th>Effort</th></tr>
+  <tr><td>D (op interception)</td><td>N/A</td><td><span class="sev-soft">Soft</span></td><td><code>keyhive_core</code></td><td><code>TraitImpl</code></td><td>Small</td></tr>
+</table>
+
+<p><strong>What was found.</strong> Two intercept strategies tried; one
+discarded:</p>
+
+<ol>
+  <li><strong>MembershipListener intercept — INFEASIBLE.</strong>
+  <code>on_delegation</code> and <code>on_revocation</code> return
+  <code>F::Future&lt;'a, ()&gt;</code> (unit type). They are fired AFTER the
+  internal store writes complete. An impl cannot refuse the operation —
+  the state is already mutated by the time the listener runs.</li>
+
+  <li><strong>Store-level intercept — TYPE-INCORRECT.</strong>
+  <code>CiphertextStore</code> is swappable as a generic and CAN refuse
+  writes by returning <code>Err</code> — but it governs only encrypted
+  content, not membership. <code>DelegationStore</code> and
+  <code>RevocationStore</code> are concrete struct fields of
+  <code>Keyhive</code>, not generic — no custom impl possible.</li>
+
+  <li><strong>Containment-via-wrapper — VIABLE.</strong> The spike's gate-2
+  pattern keeps <code>Arc&lt;Keyhive&lt;...&gt;&gt;</code> in a private field
+  of <code>KeyhiveWrapper</code>; only the wrapper's trie-driven entry
+  points (<code>grant_member</code>, <code>revoke_member</code>) can invoke
+  the underlying <code>add_member</code>/<code>revoke_member</code>.</li>
+</ol>
+
+<p><strong>Net.</strong> Containment-via-wrapper is functionally identical to
+p2panda's <code>BlockingGroups&lt;Inner&gt;</code> but is the only viable
+intercept here. The hypothesis (Soft via store-trait) was directionally
+right; the precise mechanism is different. This is the same pattern any
+production codebase would use anyway.</p>
+
+<p><strong>Evidence:</strong> <code>spike-keyhive/src/evidence/s2.md</code>.</p>
+
+<h3 id="g3">Gate 3 — CGKA rotation driven by trie change</h3>
+
+<table>
+  <tr><th>Sub-flow</th><th>Principal</th><th>Severity</th><th>Failing subcrate</th><th>Fix path</th><th>Effort</th></tr>
+  <tr><td>B (compute)</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+  <tr><td>C (recompute on rotation)</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+</table>
+
+<p><strong>What was found.</strong> BeeKEM exposes the cleanest CGKA
+substitution seam encountered in either spike:</p>
+
+<pre><code>// beekem/src/cgka.rs
+pub async fn add&lt;F, S&gt;(
+    &amp;mut self,
+    id: MemberId,
+    pk: ShareKey,           // &lt;-- direct key injection
+    signer: &amp;S,
+) -&gt; Result&lt;Option&lt;Signed&lt;CgkaOperation&gt;&gt;, CgkaError&gt;;
+
+pub async fn update&lt;F, S, R&gt;(
+    &amp;mut self,
+    new_pk: ShareKey,
+    new_sk: ShareSecretKey,
+    signer: &amp;S,
+    csprng: &amp;mut R,
+) -&gt; Result&lt;(PcsKey, Signed&lt;CgkaOperation&gt;), CgkaError&gt;;
+
+// keyhive_core/src/keyhive.rs
+pub async fn force_pcs_update(&amp;self, doc: Arc&lt;Mutex&lt;Document&gt;&gt;)
+    -&gt; Result&lt;Signed&lt;CgkaOperation&gt;, EncryptError&gt;;
+</code></pre>
+
+<p>
+  The key flows in as a direct argument — no generic-trait threading like
+  p2panda's <code>IdentityRegistry&lt;ID, Y&gt;</code> + <code>PreKeyRegistry</code>
+  pattern. The spike's resolver maps <code>MemberId → ShareKey</code> and
+  feeds it directly.
+</p>
+
+<p><strong>Asymptotic advantage.</strong> BeeKEM's tree structure gives
+O(log n) per rotation; p2panda's DCGKA is O(n). For ODS-scale orgs:</p>
+
+<table>
+  <tr><th>Org size</th><th>Keyhive (log₂ n)</th><th>p2panda (n)</th></tr>
+  <tr><td>100</td><td>~7 ops</td><td>~100 ops</td></tr>
+  <tr><td>1 000</td><td>~10 ops</td><td>~1 000 ops</td></tr>
+  <tr><td>10 000</td><td>~14 ops</td><td>~10 000 ops</td></tr>
+</table>
+
+<p>Compounds significantly under frequent revocation churn.</p>
+
+<p><strong>No integration finding equivalent to p2panda's
+<code>Dcgka::remove</code>-vs-<code>update</code> issue.</strong> Keyhive's
+API distinguishes them cleanly: <code>Cgka::remove(id, signer)</code> for
+removal; <code>Cgka::update(new_pk, ...)</code> for refresh.</p>
+
+<p><strong>Evidence:</strong> <code>spike-keyhive/src/evidence/s3.md</code>.</p>
+
+<h3 id="g4">Gate 4 — Organisation-as-pseudo-group principal</h3>
+
+<table>
+  <tr><th>Sub-flow</th><th>Principal</th><th>Severity</th><th>Failing subcrate</th><th>Fix path</th><th>Effort</th></tr>
+  <tr><td>A (delegation)</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+  <tr><td>C (recompute on rotation)</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Medium phase3</td></tr>
+</table>
+
+<div class="callout win">
+  <p><strong>Strongest single Keyhive-vs-p2panda differentiator in the
+  Phase 1.d data.</strong> Gate 4 was <span class="sev-hard">Hard</span>
+  for both p2panda flows (requiring a fork to access <code>GroupMember::Group</code>
+  at the auth layer). For Keyhive both flows are
+  <span class="sev-soft">Soft</span> with no fork.</p>
+</div>
+
+<p><strong>What was found.</strong> <code>Agent::Group(GroupId, Arc&lt;Mutex&lt;Group&gt;&gt;)</code>
+is a first-class variant of <code>Agent</code>. <code>Keyhive::add_member</code>
+takes <code>Agent&lt;F, S, T, L&gt;</code> and accepts ANY variant with an
+identical call signature. Adding the org as a member of a doc is one call:</p>
+
+<pre><code>keyhive.add_member(
+    Agent::Group(org_group_id, org_group_arc),
+    &amp;doc_membered,
+    Access::Edit,
+    &amp;[],
+).await?;
+</code></pre>
+
+<p><code>Document::transitive_members() -&gt; HashMap&lt;Identifier, (Agent, Access)&gt;</code>
+auto-resolves nested groups, so reading the doc's effective membership
+walks the org group's individual members transparently.</p>
+
+<p><strong>Flow C (rotation cascade)</strong> requires the spike to maintain
+a reverse-index <code>org_group_id → Vec&lt;DocumentId&gt;</code> so that
+when an individual is removed from the org, every doc the org has access to
+can be CGKA-rotated. This index lives in the spike's gate-4 module and is
+populated whenever <code>grant_org</code> is called. Effort: Phase 3 Medium
+(reflects the index-maintenance code paths).</p>
+
+<p><strong>Documented constraint.</strong> Same as p2panda — managerial actions
+must stay with individuals; the org pseudo-group is a Read/Edit-level grant.
+Admin status is on-chain (Phase 1.a domain), not in the local-first ACL.</p>
+
+<p><strong>Evidence:</strong> <code>spike-keyhive/src/evidence/s4.md</code>.</p>
+
+<h3 id="g5">Gate 5 — Peer-to-peer connection policy</h3>
+
+<table>
+  <tr><th>Sub-flow</th><th>Principal</th><th>Severity</th><th>Failing subcrate</th><th>Fix path</th><th>Effort</th></tr>
+  <tr><td>E1 (accept/reject)</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+  <tr><td>E2 (accept/reject)</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+  <tr><td>F1 (terminate on revocation)</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+  <tr><td>F2 (terminate on org rotation)</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td></tr>
+</table>
+
+<p><strong>What was found.</strong> Keyhive has no published transport
+(Beelay is not yet released at the pin). The spike implements an in-process
+<code>PolicyManager</code> session model and bridges it to Keyhive via
+<code>MembershipListener::on_revocation</code>:</p>
+
+<pre><code>// spike-keyhive/src/s5_p2p_policy.rs (sketch)
+pub struct PolicyManager&lt;R: MemberKeyResolver&gt; {
+    resolver: Arc&lt;R&gt;,
+    adapter: IdAdapter,
+    sessions: Mutex&lt;HashMap&lt;SessionId, SessionRecord&gt;&gt;,
+}
+impl&lt;R&gt; PolicyManager&lt;R&gt; {
+    pub fn authorise_session(&amp;self, peer_vk: &amp;VerifyingKey, doc: DocumentId)
+        -&gt; Result&lt;SessionId, PolicyError&gt;;
+    pub fn recheck_open_sessions(&amp;self) -&gt; usize;
+}
+</code></pre>
+
+<p>
+  The MembershipListener wired into <code>Keyhive</code> calls
+  <code>policy_mgr.recheck_open_sessions()</code> from
+  <code>on_revocation</code>. This is <strong>push-based</strong>: a
+  revocation propagating through <code>receive_static_event</code>
+  immediately triggers session rechecks. p2panda's spike used a pull-based
+  periodic recheck because no equivalent push hook was available at the sync
+  layer.
+</p>
+
+<p><strong>Reverse-lookup gap (shared with p2panda).</strong>
+<code>adapter.member_id_for(peer_vk)</code> only finds entries cached by a
+prior <code>resolve</code> call. A cold authorisation request from a peer
+the spike has never seen has no entry. Phase 3 needs a formal
+<code>MemberKeyResolver::find_member_by_device(VerifyingKey) → Option&lt;MemberId&gt;</code>
+method — this is a foundation-layer concern (spike-common), not a
+Keyhive-specific issue.</p>
+
+<p><strong>Evidence:</strong> <code>spike-keyhive/src/evidence/s5.md</code>.</p>
+
+<h3>Part 1 totals</h3>
+
+<table>
+  <tr><th>Severity</th><th>Count</th></tr>
+  <tr><td><span class="sev-hard">Hard</span></td><td>1 row (1A)</td></tr>
+  <tr><td><span class="sev-soft">Soft</span></td><td>9 rows (2D, 3B, 3C, 4A, 4C, 5E1, 5E2, 5F1, 5F2)</td></tr>
+  <tr><td><strong>Total burden</strong></td><td><strong>22</strong></td></tr>
+</table>
+
+<p>
+  The single Hard row (gate 1) is salvaged in-spike via the <code>IdAdapter</code>;
+  no fork needed. The 9 Soft rows are all <code>TraitImpl Small</code> except
+  the gate-4 Flow C which carries <code>phase3_effort = Medium</code> for the
+  org→docs reverse-index maintenance.
+</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="part-2">
+<h2>4. Part 2 — Findings with WASM requirement</h2>
+
+<div class="callout win">
+  <p><strong>Keyhive's WASM story is materially better than p2panda's.</strong>
+  All three Keyhive sub-crates compile to <code>wasm32-unknown-unknown</code>
+  at the pinned revision with only the standard
+  <code>getrandom = { version = "0.2", features = ["js"] }</code> peer-dep
+  workaround. Gate 0 scores <span class="sev-none">None</span> — no Hard rows,
+  no forks, no burden contribution.</p>
+</div>
+
+<h3 id="g0">Gate 0 — WASM / no_std compile</h3>
+
+<table>
+  <tr><th>Sub-crate</th><th>Status</th><th>Notes</th></tr>
+  <tr>
+    <td><code>keyhive_crypto</code></td>
+    <td><span class="sev-none">PASS</span></td>
+    <td>Clean <code>no_std + alloc</code> compile with the standard
+    <code>getrandom 0.2 / js</code> peer-dep pin.</td>
+  </tr>
+  <tr>
+    <td><code>beekem</code></td>
+    <td><span class="sev-none">PASS</span></td>
+    <td>Compiles cleanly when its <code>std</code> feature stays enabled
+    (the default). The <code>--no-default-features</code> mode is broken at
+    the pin (missing trait imports for <code>Digest::hash</code>,
+    <code>async_signer::try_sign_async</code>) — an upstream bug, but
+    not WASM-blocking since <code>wasm32-unknown-unknown</code> is a
+    std-bearing target.</td>
+  </tr>
+  <tr>
+    <td><code>keyhive_core</code></td>
+    <td><span class="sev-none">PASS</span></td>
+    <td><strong>Inventory hypothesis REJECTED.</strong> The Phase 1.d
+    sub-crate inventory predicted DEFINITE FAIL due to unconditional
+    <code>tokio</code> + <code>futures</code> dependencies. In practice the
+    code paths only reach the wasm32-compatible slice of tokio (the
+    <code>tokio::sync</code> channels/mutexes), and the crate compiles
+    cleanly with <code>tokio v1.52.3</code> on the wasm target. The
+    inventory's caution was warranted; the actual outcome is favourable.</td>
+  </tr>
+</table>
+
+<p><strong>spike-keyhive workspace caveat.</strong> The spike's own
+<code>spike-keyhive</code> crate does not compile for wasm32, but only
+because its <code>Cargo.toml</code> requests tokio's <code>rt-multi-thread</code>
+feature for native test convenience. A production consumer of Keyhive for
+browsers would not request that feature, so the underlying gap-0 finding —
+"Keyhive itself is WASM-clean" — stands.</p>
+
+<p><strong>Evidence:</strong>
+<code>docs/phase-1d/gate-0-results.md</code> §Keyhive;
+<code>spike-keyhive/src/evidence/s0_wasm.md</code>;
+scratch probes at <code>/tmp/wasm-probe-{keyhive_crypto,beekem,keyhive_core}/</code>.</p>
+
+<h3>Part 2 totals</h3>
+
+<p>Gate 0 contributes <strong>zero</strong> to the burden (severity
+<span class="sev-none">None</span>, no fix needed). Part 2's total burden
+equals Part 1's: <strong>22</strong>.</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="cross-cutting">
+<h2>5. Cross-cutting observations</h2>
+
+<h3>Reverse-lookup gap (foundation-layer)</h3>
+<p>
+  Both gate 4 (org rotation cascade) and gate 5 (connection policy) need a
+  <strong>reverse lookup</strong> — given a device <code>VerifyingKey</code>,
+  return the owning <code>MemberId</code>. The <code>MemberKeyResolver</code>
+  trait in <code>spike-common</code> has no such method. Workarounds exist
+  (the spike's <code>IdAdapter</code> caches the mapping on first lookup;
+  <code>PolicyManager</code> accepts unknown peers as
+  <code>PolicyError::UnknownPeer</code>), but they're incomplete.
+</p>
+<p>
+  This is the same gap recorded by <code>spike-p2panda</code>. Phase 3
+  should add the method to the resolver trait. This is foundation-layer
+  work, not library-specific.
+</p>
+
+<h3>Reverse-index for org-as-pseudo-group</h3>
+<p>
+  Gate 4 Flow C needs to know which documents have the org as a member, so
+  that a rotation in the org cascades correctly. Keyhive does not expose
+  this query — it's the inverse of the delegation graph. The spike
+  maintains the index in its own wrapper state, populated on every
+  <code>grant_org</code> call. Phase 3 must either rely on the wrapper
+  owning this index, or add a Keyhive-side API for the query.
+</p>
+
+<h3>Async signer / FutureForm generic threading</h3>
+<p>
+  Keyhive's generics are dense: <code>Keyhive&lt;F, S, T, P, C, L, R&gt;</code>
+  has seven type parameters. Most have defaults (<code>ContentRef = [u8; 32]</code>,
+  <code>L = NoListener</code>, etc.), so instantiation is manageable, but
+  any spike code that holds a typed reference to a <code>Keyhive&lt;...&gt;</code>
+  has to commit to all seven. Phase 3 should consider a type alias
+  (<code>type OdsKeyhive = Keyhive&lt;FutureFormTokio, OdsSigner, ...&gt;</code>)
+  per scope to keep call sites readable.
+</p>
+
+<h3>Alpha-stability risk</h3>
+<p>
+  Keyhive is <code>0.0.0-alpha.3</code>. Three recent commits in the last
+  10 (<code>1116eaf</code> transitive delegation, <code>f162854</code>
+  serialization methods, <code>7914692</code> Send-ability fixes) show
+  active feature development. The public Rust API surface may break
+  between alphas. Re-run the L1 battery before any production pin.
+</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="gap-matrix">
+<h2>6. Full gap matrix (Keyhive rows)</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Gate</th><th>Flow</th><th>Principal</th><th>Sev.</th>
+      <th>Failing subcrate</th><th>Fix path</th><th>Fix effort</th>
+      <th>Phase 3 effort</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>0</td><td>A</td><td>NA</td><td><span class="sev-none">None</span></td><td>—</td><td><code>None</code></td><td>—</td><td>Small</td></tr>
+    <tr><td>1</td><td>A</td><td>Member</td><td><span class="sev-hard">Hard</span></td><td><code>keyhive_core</code></td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+    <tr><td>2</td><td>D</td><td>NA</td><td><span class="sev-soft">Soft</span></td><td><code>keyhive_core</code></td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+    <tr><td>3</td><td>B</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+    <tr><td>3</td><td>C</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+    <tr><td>4</td><td>A</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+    <tr><td>4</td><td>C</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Medium</td></tr>
+    <tr><td>5</td><td>E1</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+    <tr><td>5</td><td>E2</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+    <tr><td>5</td><td>F1</td><td>Member</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+    <tr><td>5</td><td>F2</td><td>Org</td><td><span class="sev-soft">Soft</span></td><td>—</td><td><code>TraitImpl</code></td><td>Small</td><td>Small</td></tr>
+  </tbody>
+</table>
+
+<p>Canonical machine-readable matrix at
+<code>docs/phase-1d/gap-matrix.json</code>;
+combined p2panda+Keyhive rendered matrix at
+<code>docs/phase-1d/gap-matrix.md</code>.</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="evidence-map">
+<h2>7. Evidence map</h2>
+
+<table>
+  <thead>
+    <tr><th>Gate</th><th>Evidence file</th><th>Spike module</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>0</td><td><code>spike-keyhive/src/evidence/s0_wasm.md</code></td><td>(probes in <code>/tmp/wasm-probe-*</code>)</td></tr>
+    <tr><td>1</td><td><code>spike-keyhive/src/evidence/s1.md</code></td><td><code>src/adapter.rs</code>, <code>src/s1_stable_id_acl.rs</code></td></tr>
+    <tr><td>2</td><td><code>spike-keyhive/src/evidence/s2.md</code></td><td><code>src/s2_membership_intercept.rs</code></td></tr>
+    <tr><td>3</td><td><code>spike-keyhive/src/evidence/s3.md</code></td><td><code>src/s3_cgka_rotation.rs</code></td></tr>
+    <tr><td>4</td><td><code>spike-keyhive/src/evidence/s4.md</code></td><td><code>src/s4_org_pseudo_group.rs</code></td></tr>
+    <tr><td>5</td><td><code>spike-keyhive/src/evidence/s5.md</code></td><td><code>src/s5_p2p_policy.rs</code></td></tr>
+  </tbody>
+</table>
+
+<p>Sub-crate inventory: <code>docs/phase-1d/subcrate-inventory.md</code>
+§Keyhive (full API surface citations with file paths at the pinned SHA).</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="recommendations">
+<h2>8. Recommendations for Phase 3</h2>
+
+<ol>
+  <li>
+    <strong>Adopt the <code>IdAdapter</code> pattern verbatim.</strong> The
+    ~30-line <code>spike-keyhive/src/adapter.rs</code> is production-ready in
+    shape if not in robustness. Phase 3 should harden it (handle resolver
+    races, cache eviction policy) but the design is sound.
+  </li>
+  <li>
+    <strong>Add reverse lookup to <code>MemberKeyResolver</code>.</strong>
+    Foundation-layer change in <code>spike-common</code>:
+    <code>fn find_member_by_device(&amp;self, vk: &amp;VerifyingKey) -&gt; Option&lt;MemberId&gt;</code>.
+    Eliminates the spike's closure-injection workaround.
+  </li>
+  <li>
+    <strong>Build the org→docs reverse index inside the wrapper.</strong> For
+    gate 4 Flow C cascade. Maintain inside the same wrapper that owns the
+    Keyhive instance — keeps the index consistent with the delegation graph
+    by construction.
+  </li>
+  <li>
+    <strong>Use type aliases for the Keyhive generic stack.</strong> Pin
+    the seven type parameters per application scope:
+    <code>type OdsKeyhive = Keyhive&lt;TokioFutureForm, OdsSigner, [u8; 32], Vec&lt;u8&gt;, OdsCiphertextStore, PolicyListener, OsRng&gt;;</code>.
+    Improves readability significantly.
+  </li>
+  <li>
+    <strong>Re-pin and re-run L1 before production commit.</strong> Keyhive
+    is alpha. Lock to a tagged release or vendor the SHA in a workspace
+    sidecar that runs CI against the pin.
+  </li>
+  <li>
+    <strong>Bridge MembershipListener to the trie's revocation propagation.</strong>
+    The listener fires on local-only delegation/revocation events. Phase 3
+    must additionally route on-chain trie revocations through
+    <code>Keyhive::receive_static_event(StaticEvent::Revoked(...))</code> so
+    that the local listener fires for both sources symmetrically.
+  </li>
+  <li>
+    <strong>Track BeeKEM's O(log n) advantage as a key Phase 3 design lever.</strong>
+    For ODS use cases with frequent revocation churn, the asymptotic
+    advantage compounds. If a phase-3 scaling decision becomes contentious,
+    this is the citation.
+  </li>
+</ol>
+
+</section>
+
+<footer>
+  <p>
+    Spike report for ODS Phase 1.d — Keyhive library qualification.
+    Companion to <a href="spike-p2panda-report.html">spike-p2panda-report.html</a>
+    and (forthcoming) <code>spike-comparison.html</code>.
+    See <a href="../superpowers/specs/2026-05-13-ods-phase-1d-library-qualification-design.md">design spec</a>
+    and <a href="../superpowers/plans/2026-06-01-spike-keyhive-gates.md">implementation plan</a>
+    for context.
+  </p>
+</footer>
+
+</main>
+</body>
+</html>

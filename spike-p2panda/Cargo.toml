@@ -1,0 +1,33 @@
+[package]
+name = "spike-p2panda"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0-only"
+description = "Phase 1.d qualification spike for the p2panda decentralized data engine"
+publish = false
+
+[dependencies]
+spike-common = { path = "../spike-common" }
+ed25519-dalek = { version = "2", default-features = false, features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }
+
+p2panda-core       = { git = "https://github.com/p2panda/p2panda", rev = "41559b0dfc2d7d0e9e4fba251ceb7f8094ff8be1", default-features = false }
+p2panda-auth       = { git = "https://github.com/p2panda/p2panda", rev = "41559b0dfc2d7d0e9e4fba251ceb7f8094ff8be1", default-features = false, features = ["serde"] }
+p2panda-encryption = { git = "https://github.com/p2panda/p2panda", rev = "41559b0dfc2d7d0e9e4fba251ceb7f8094ff8be1", default-features = false, features = ["data_scheme"] }
+p2panda-spaces     = { git = "https://github.com/p2panda/p2panda", rev = "41559b0dfc2d7d0e9e4fba251ceb7f8094ff8be1" }
+p2panda-net        = { git = "https://github.com/p2panda/p2panda", rev = "41559b0dfc2d7d0e9e4fba251ceb7f8094ff8be1" }
+p2panda-sync       = { git = "https://github.com/p2panda/p2panda", rev = "41559b0dfc2d7d0e9e4fba251ceb7f8094ff8be1" }
+
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync"] }
+
+[dev-dependencies]
+ciborium = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Enable test_utils feature for p2panda-encryption so we can use
+# KeyManager::init_and_generate_prekey in gate-3 DCGKA tests.
+p2panda-encryption = { git = "https://github.com/p2panda/p2panda", rev = "41559b0dfc2d7d0e9e4fba251ceb7f8094ff8be1", default-features = false, features = ["data_scheme", "test_utils"] }
+
+[lints]
+workspace = true

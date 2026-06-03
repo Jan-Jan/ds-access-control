@@ -1,0 +1,420 @@
+{
+  "rows": [
+    {
+      "library": "Panda",
+      "gate": 0,
+      "sub_flow": "A",
+      "principal": "NA",
+      "severity": "Hard",
+      "failing_subcrate": "p2panda-sync",
+      "fix_path": "Fork",
+      "fix_effort": "Large",
+      "phase3_effort": "Medium",
+      "evidence": [
+        "docs/phase-1d/gate-0-results.md",
+        "spike-p2panda/src/evidence/s0_wasm.md"
+      ],
+      "escape_hatch": null,
+      "salvage_notes": "p2panda-sync is the sole Hard blocker (std tokio / mio); core, auth, encryption, spaces, and net-no-default all pass wasm32 with consumer-side getrandom pins. Salvage path per project_p2panda_fork_policy: fork p2panda-sync locally and swap tokio for tokio_with_wasm. Upstream PRs disabled until the spike demonstrates value.",
+      "notes": "core: PASS (getrandom/js pin); auth: PASS; encryption: PASS (getrandom 0.3/wasm_js pin); spaces: PASS (same pin); net --no-default-features: PASS (tokio_with_wasm); p2panda-sync: FAIL — mio 1.2.0 (std-only I/O poller) via tokio default-features=true"
+    },
+    {
+      "library": "Panda",
+      "gate": 1,
+      "sub_flow": "A",
+      "principal": "Member",
+      "severity": "Hard",
+      "failing_subcrate": "p2panda-spaces",
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-p2panda/tests/l1_p2panda_auth.rs",
+        "spike-p2panda/tests/l1_p2panda_spaces.rs",
+        "spike-p2panda/src/evidence/s1.md",
+        "spike-p2panda/src/s1_stable_id_acl.rs",
+        "spike-p2panda/tests/l2_g1.rs",
+        "spike-p2panda/tests/l3_revocation.rs",
+        "spike-p2panda/tests/l3_org_pseudo_group.rs"
+      ],
+      "escape_hatch": "IdentityRegistry::identity_key is a static method (no &self); resolver threaded via Y=ResolverPki<R>. Ed25519→X25519 byte reinterpretation in identity_key (safe for PKI-lookup role). p2panda_core::VerifyingKey bridge type required for ActorId::from.",
+      "salvage_notes": "p2panda-auth at L1 is clean (severity None). The Hard is at p2panda-spaces where ActorId is hardwired. L2 confirmed: materialise_actor_id + ResolverPki together are ~40 functional lines. Rotation tracking works via call-time resolution. fix_effort revised to Small (was Medium). Salvage is TraitImpl, not showstopping. See evidence/s1.md §L2.",
+      "notes": "L1: p2panda-auth None, p2panda-spaces Hard. L2: both materialise_actor_id and ResolverPki<IdentityRegistry> implemented and tested. Rotation-tracking confirmed at runtime (Probe 3 from Task 4). ActorId::from(PandaVK) construction path: dalek::VK → p2panda_core::VK → ActorId. 7/7 tests pass. IdentityRegistry static-method escape hatch: Y=ResolverPki<R>. L3: revocation+org_pseudo_group scenarios exercise gate-1 ACL (l3_revocation.rs, l3_org_pseudo_group.rs)."
+    },
+    {
+      "library": "Panda",
+      "gate": 2,
+      "sub_flow": "D",
+      "principal": "NA",
+      "severity": "Hard",
+      "failing_subcrate": "p2panda-spaces",
+      "fix_path": "Fork",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-p2panda/tests/l1_p2panda_auth_intercept.rs",
+        "spike-p2panda/tests/l2_g2.rs",
+        "spike-p2panda/src/evidence/s2.md",
+        "spike-p2panda/src/s2_membership_intercept.rs"
+      ],
+      "escape_hatch": "BlockingGroups<Inner> intercepts Groups trait (p2panda-auth layer, None severity). AuthStore<C> cannot be implemented externally: AuthGroupState<C> is in private mod types; AuthMessage<C> is in private mod auth. Fork fixes: add pub use types::AuthGroupState to p2panda-spaces lib.rs.",
+      "salvage_notes": "p2panda-auth layer is clean (None). Hard is at p2panda-spaces store layer: AuthStore<C>::set_auth parameter type is in a private module, blocking external impl. Salvage is Fork (not TraitImpl as hypothesised): add one pub re-export to p2panda-spaces. Fork effort Small. Alternative: BlockingForge wraps Forge trait but is weaker (does not prevent set_auth before forge).",
+      "notes": "L1: p2panda-auth None (Groups trait pub, externally implementable, 5/5 tests pass). p2panda-spaces Hard (AuthGroupState<C> in private mod types; compile error E0603 confirmed). L2: best-effort — trie-only-write invariant confirmed at CRDT layer (3/3 tests pass). Spaces runtime deferred: architecturally blocked by private type, not time-boxed. Forge trait secondary intercept is syntactically possible but weaker. Inventory hypothesis was Soft/TraitImpl; actual is Hard/Fork for spaces layer."
+    },
+    {
+      "library": "Panda",
+      "gate": 3,
+      "sub_flow": "B",
+      "principal": "Member",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-p2panda/tests/l1_p2panda_encryption.rs",
+        "spike-p2panda/tests/l2_g3.rs",
+        "spike-p2panda/src/evidence/s3.md",
+        "spike-p2panda/src/s3_cgka_rotation.rs",
+        "spike-p2panda/tests/l3_revocation.rs",
+        "spike-p2panda/tests/l3_org_pseudo_group.rs"
+      ],
+      "escape_hatch": "DcgkaMemberId newtype (orphan rule); DcgkaMemberId: Display (thiserror requirement); KeyRegistry<DcgkaMemberId> as PKI (not ResolverPki — shared-state constraint); test_utils feature gating for KeyManager::init_and_generate_prekey",
+      "salvage_notes": "No upstream PRs. All generics public and externally implementable. DcgkaMemberId adapter is ~10 lines. KeyRegistry populated from resolver at group-setup and rotation time. Flow B: Dcgka::create + process confirmed (5/5 L1 tests). Production path: resolver.p2p_member_key → LongTermKeyBundle → KeyRegistry::add_longterm_bundle.",
+      "notes": "L1: IdentityRegistry::identity_key via ResolverPki confirmed; full Dcgka::create + Dcgka::process round-trip with KeyRegistry<DcgkaMemberId> as PKI confirmed. Orphan-rule friction: DcgkaMemberId newtype required. DcgkaError requires ID: Display. test_utils feature needed for KeyManager::init_and_generate_prekey in test setup. L3: revocation (Dcgka::remove + forward-security) and org_pseudo_group (trigger_recompute on rotation) scenarios (l3_revocation.rs, l3_org_pseudo_group.rs). Integration finding: revocation uses Dcgka::remove (not trigger_recompute) — Dcgka::update sends DMs to all DGM members including removed ones."
+    },
+    {
+      "library": "Panda",
+      "gate": 3,
+      "sub_flow": "C",
+      "principal": "Member",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-p2panda/tests/l1_p2panda_encryption.rs",
+        "spike-p2panda/tests/l2_g3.rs",
+        "spike-p2panda/src/evidence/s3.md",
+        "spike-p2panda/src/s3_cgka_rotation.rs",
+        "spike-p2panda/tests/l3_revocation.rs",
+        "spike-p2panda/tests/l3_org_pseudo_group.rs"
+      ],
+      "escape_hatch": "trigger_recompute injects fresh KeyRegistryState and calls Dcgka::update. DcgkaMemberId newtype for IdentityHandle. LocalDgm<ID,OP> local GroupMembership (mirrors TestDgm; avoids test_utils dep in production lib).",
+      "salvage_notes": "No upstream PRs. trigger_recompute (~15 lines) is the production hook: resolver notification -> rebuild KeyRegistry -> Dcgka::update -> distribute direct messages. Full round-trip (create, update, process) confirmed at L1 and L2. Epoch-0 != epoch-1 secrets; alice+bob share epoch-1 secret.",
+      "notes": "L1: identity_key via ResolverPki reflects rotation immediately (resolver-level proof). Full Dcgka::update + process round-trip after PKI rebuild confirmed. Epoch secrets differ; shared secret verified. L2: combined Flow B+C integrated test passes. Both resolver-layer and DCGKA-layer evidence collected. L3: org_pseudo_group rotation drives trigger_recompute; epoch-1 secret shared by alice+bob confirmed (l3_org_pseudo_group.rs)."
+    },
+    {
+      "library": "Panda",
+      "gate": 4,
+      "sub_flow": "A",
+      "principal": "Org",
+      "severity": "Hard",
+      "failing_subcrate": "p2panda-spaces",
+      "fix_path": "Fork",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-p2panda/tests/l1_p2panda_auth.rs",
+        "spike-p2panda/tests/l2_g4.rs",
+        "spike-p2panda/src/evidence/s4.md",
+        "spike-p2panda/src/s4_org_pseudo_group.rs",
+        "spike-p2panda/tests/l3_org_pseudo_group.rs"
+      ],
+      "escape_hatch": "GroupCrdtState::members() auto-resolves nested groups — no manual walker needed. effective_member_keys() bridges CRDT stable-IDs to live P2pMemberKeys via resolver. GroupMember::Group limited to non-Manage access (ManagerGroupsNotAllowed constraint).",
+      "salvage_notes": "p2panda-auth layer: None (GroupMember::Group variant fully works; members() auto-resolves nested membership). p2panda-spaces layer: Hard — Group::add and Space::add accept only ActorId, not a group reference. Same Fork as gate 2 (add pub use types::AuthGroupState + Group::add_nested method). fix_effort Small (piggybacks on the required gate-2 fork).",
+      "notes": "L1 auth: GroupMember::Group accepted by GroupCrdt::process; members() auto-resolves nested groups (test4+test5 pass). Manage-access group rejected (test6). L2 Flow A: both alice and bob appear in effective_member_keys via ORG pseudo-group. Flow C: rotation tracked via resolver — CRDT unchanged, effective key set updated. 6 L1 + 2 L2 tests pass. L3: org_pseudo_group exercises OrgPseudoGroupAdapter + effective_member_keys + DCGKA epoch (l3_org_pseudo_group.rs)."
+    },
+    {
+      "library": "Panda",
+      "gate": 4,
+      "sub_flow": "C",
+      "principal": "Org",
+      "severity": "Hard",
+      "failing_subcrate": "p2panda-spaces",
+      "fix_path": "Fork",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-p2panda/tests/l2_g4.rs",
+        "spike-p2panda/src/evidence/s4.md",
+        "spike-p2panda/src/s4_org_pseudo_group.rs",
+        "spike-p2panda/tests/l3_org_pseudo_group.rs"
+      ],
+      "escape_hatch": "effective_member_keys() re-resolves all member keys on each call; rotating alice key in trie produces new key in effective set without any CRDT mutation. Resolver is the single source of truth for key material.",
+      "salvage_notes": "Rotation tracking works entirely at the resolver layer. CRDT stores only stable AuthMemberId values; key rotation is invisible to the CRDT. Phase 3 must ensure effective_member_keys is called after each trie rotation event to produce the updated key set. No CRDT operation needed for Flow C with org principal.",
+      "notes": "L2 Flow C: alice key K1 present before rotation; trie.stub_rotate_member_key updates to K2; effective_member_keys returns K2 (not K1); CRDT still lists alice by stable ID. Hard severity cascades from spaces-layer ActorId hardwiring (same root cause as Flow A). Auth-layer severity for Flow C: None. L3: org_pseudo_group confirms CRDT unchanged + alice K2 in effective set + epoch advance (l3_org_pseudo_group.rs)."
+    },
+    {
+      "library": "Panda",
+      "gate": 5,
+      "sub_flow": "E1",
+      "principal": "Member",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-p2panda/tests/l1_p2panda_sync.rs",
+        "spike-p2panda/src/s5_p2p_policy.rs",
+        "spike-p2panda/src/evidence/s5.md",
+        "spike-p2panda/tests/l3_gating.rs"
+      ],
+      "escape_hatch": "policy_check closure (Option C): peer_to_member: F: Fn(VerifyingKey)->Option<MemberId> supplies reverse index not present in MemberKeyResolver trait. SessionConfig::remote: VerifyingKey is the intercept point at session-establish time.",
+      "salvage_notes": "Manager<T> wrapping is the correct salvage path. Full impl Manager<T> for PolicyManager deferred (RPIT on all three trait methods; small Phase 3 wiring task). policy_check direct testing confirms detection logic. fix_effort Small.",
+      "notes": "L1: policy_check accepts authorised member, rejects unauthorised (PolicyError::Unauthorised) and unknown peer (PolicyError::UnknownPeer). 4 tests pass. SessionConfig::remote field confirmed in p2panda-sync/src/lib.rs (field name is remote, not remote_peer — spec typo corrected at implementation time). L3: gating scenario exercises policy_check accept/reject + DocAcl::for_members (l3_gating.rs)."
+    },
+    {
+      "library": "Panda",
+      "gate": 5,
+      "sub_flow": "E2",
+      "principal": "Org",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-p2panda/tests/l1_p2panda_sync.rs",
+        "spike-p2panda/src/s5_p2p_policy.rs",
+        "spike-p2panda/src/evidence/s5.md"
+      ],
+      "escape_hatch": "DocAcl::org_wide() path delegates to resolver.is_member() — org-member enumeration already present in MemberKeyResolver via org_member_ids(). No additional trait changes needed for E2 check.",
+      "salvage_notes": "org-wide ACL path uses resolver.is_member() at policy_check time. Any current org member accepted; removed members rejected immediately at next policy_check call. Same TraitImpl salvage as E1.",
+      "notes": "L1: e2_connection_accepted_via_org_principal confirms alice+bob accepted, charlie rejected. e2_connection_rejected_member_removed_from_org confirms org-removed peer rejected via is_member check. 2 tests pass."
+    },
+    {
+      "library": "Panda",
+      "gate": 5,
+      "sub_flow": "F1",
+      "principal": "Member",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-p2panda/tests/l2_g5.rs",
+        "spike-p2panda/src/s5_p2p_policy.rs",
+        "spike-p2panda/src/evidence/s5.md",
+        "spike-p2panda/tests/l3_gating.rs"
+      ],
+      "escape_hatch": "recheck_open_sessions() is a pull-model hook: caller invokes after trie-change events. should_close flag set; actual async close (ToSync::Close via session_handle sink) is Phase 3 wiring. StubTrie is pull-only — no push notification mechanism.",
+      "salvage_notes": "Pull-model recheck sufficient for spike. Phase 3 must wire actual ToSync::Close call to inner Manager<T>::session_handle. Trie push notification gap documented. fix_effort Small (wiring is straightforward; no new trait changes needed).",
+      "notes": "L2: f1_terminate_session_on_member_revocation — alice revoked, session 1 flagged, bob session unchanged. f1_recheck_idempotent_on_already_flagged_sessions — second recheck returns 0. 2 tests pass. L3: gating scenario confirms bob's session flagged + fresh connection rejected; alice's session unchanged; full fixture round-trip (l3_gating.rs)."
+    },
+    {
+      "library": "Panda",
+      "gate": 5,
+      "sub_flow": "F2",
+      "principal": "Org",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-p2panda/tests/l2_g5.rs",
+        "spike-p2panda/src/s5_p2p_policy.rs",
+        "spike-p2panda/src/evidence/s5.md"
+      ],
+      "escape_hatch": "recheck_open_sessions() re-evaluates resolver.is_member for org-wide sessions. Removed member sessions flagged; remaining org members unaffected. Same pull-model as F1.",
+      "salvage_notes": "org-wide path correctly isolates per-peer revocation: only the removed member session is flagged. All-empty-org variant also tested. Same Phase 3 wiring task as F1 for actual async close.",
+      "notes": "L2: f2_terminate_org_session_on_member_removal — alice removed from org, session 10 flagged, bob session 20 unchanged. f2_all_sessions_terminated_when_org_emptied — both sessions flagged. 2 tests pass."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 0,
+      "sub_flow": "A",
+      "principal": "NA",
+      "severity": "None",
+      "failing_subcrate": null,
+      "fix_path": "None",
+      "fix_effort": null,
+      "phase3_effort": "Small",
+      "evidence": [
+        "docs/phase-1d/gate-0-results.md (Keyhive section)",
+        "/tmp/wasm-probe-{keyhive_crypto,beekem,keyhive_core}/"
+      ],
+      "escape_hatch": null,
+      "salvage_notes": "No salvage required for WASM use. All three relevant crates compile to wasm32 with default features and the standard `getrandom = { version = \"0.2\", features = [\"js\"] }` peer-dep workaround.",
+      "notes": "keyhive_crypto: PASS (getrandom 0.2/js pin); beekem: PASS with std (default-features=false mode is broken at the pin — upstream bug, not WASM-related); keyhive_core: PASS — INVENTORY HYPOTHESIS REJECTED (predicted DEFINITE FAIL on tokio+futures, but actual compile succeeds because only tokio::sync slices are used). spike-keyhive itself rejects wasm32 only because it requests tokio rt-multi-thread for native tests — spike-tooling concern."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 1,
+      "sub_flow": "A",
+      "principal": "Member",
+      "severity": "Hard",
+      "failing_subcrate": "keyhive_core",
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-keyhive/src/evidence/s1.md",
+        "spike-keyhive/src/adapter.rs",
+        "spike-keyhive/src/s1_stable_id_acl.rs",
+        "spike-keyhive/tests/l2_g1.rs",
+        "spike-keyhive/tests/l3_lazy_onboarding.rs"
+      ],
+      "escape_hatch": "Identifier and IndividualId are constructible from VerifyingKey directly (pub fields / From derives). The high-level Keyhive::add_member convenience API requires Individual::new(KeyOp), but the two-tier ODS design operates below it: delegations reference VerifyingKey directly, CGKA placement is deferred to when the new member self-adds on come-online.",
+      "salvage_notes": "ODS design pivot (2026-06-03): trie publishes long-term VerifyingKey only — no prekey/ContactCard publication needed. Lazy-CGKA model separates ACL grant (immediate, trie-authoritative) from CGKA placement (deferred to come-online self-add via beekem::Cgka direct). The high-level keyhive_core::Keyhive::add_member is bypassed in favour of direct delegation + beekem composition. Spike's IdAdapter remains the MemberId->VerifyingKey reverse-lookup cache (used by gates 4C+5). The L3 lazy_onboarding test demonstrates the design semantics end-to-end (BeeKEM epoch separation + history transfer via plaintext re-transmission under the new epoch).",
+      "notes": "DESIGN PIVOT (2026-06-03): the lazy-CGKA / two-tier model commits to trie-publishes-VerifyingKey-only and defers CGKA placement to member come-online. phase3_effort is Small (original API-only prediction restored after the 2026-06-02 interim revision). The integration finding (Individual::new requires KeyOp) is a footnote about the high-level convenience API. L2 (l2_g1) exercises the eager-add path; L3 (l3_lazy_onboarding) validates the lazy semantics end-to-end on first run, no integration finding."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 2,
+      "sub_flow": "D",
+      "principal": "NA",
+      "severity": "Soft",
+      "failing_subcrate": "keyhive_core",
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-keyhive/src/evidence/s2.md"
+      ],
+      "escape_hatch": "Containment-via-wrapper (KeyhiveWrapper holds Keyhive in a private field, only trie-driven dispatch can invoke add_member/revoke_member). MembershipListener is post-fact (returns ()), cannot block. DelegationStore/RevocationStore are concrete non-configurable fields.",
+      "salvage_notes": "Wrapper newtype over Arc<Keyhive<...>> that exposes only the trie-driven entry points. Same pattern any production codebase would use anyway.",
+      "notes": "MembershipListener on_delegation/on_revocation return F::Future<'a, ()> — purely post-fact, cannot refuse. CiphertextStore is swappable but governs only encrypted content, not membership. DelegationStore/RevocationStore are concrete fields, not generic. Containment-via-wrapper is the viable substitution."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 3,
+      "sub_flow": "B",
+      "principal": "Member",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-keyhive/src/evidence/s3.md"
+      ],
+      "escape_hatch": null,
+      "salvage_notes": "Cgka::add(id, pk, signer) takes the leaf key directly — clean key injection. Resolver-driven path resolves MemberId→VerifyingKey via adapter, packs as ShareKey, calls Cgka::add or higher-level keyhive.add_member.",
+      "notes": "Cgka::add takes the public key as a direct argument — strictly better than p2panda's IdentityRegistry trait-thread pattern. BeeKEM is O(log n) per update vs DCGKA O(n). No generic-trait threading required."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 3,
+      "sub_flow": "C",
+      "principal": "Member",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-keyhive/src/evidence/s3.md"
+      ],
+      "escape_hatch": null,
+      "salvage_notes": "Keyhive::force_pcs_update(doc) is the rotation entry. Trie-change observer calls adapter.invalidate(member_id) followed by keyhive.force_pcs_update(doc).",
+      "notes": "Cgka::remove(id, signer) and Cgka::update(new_pk, new_sk, signer, csprng) are distinct entry points — no integration finding like p2panda's Dcgka::remove-vs-update issue. Forward-security via fresh PcsKey on every rotation."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 4,
+      "sub_flow": "A",
+      "principal": "Org",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-keyhive/src/evidence/s4.md"
+      ],
+      "escape_hatch": null,
+      "salvage_notes": "Agent::Group(GroupId, Arc<Mutex<Group>>) is first-class. keyhive.add_member(Agent::Group(org_id, org_group), doc, access, &[]) makes the org a doc member. transitive_members() auto-resolves nested groups.",
+      "notes": "STRONG POSITIVE vs p2panda — Keyhive's Agent enum has a first-class Group variant; add_member accepts ANY Agent variant with identical signature. p2panda required a fork (pub use in p2panda-spaces) to access GroupMember::Group at the auth layer."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 4,
+      "sub_flow": "C",
+      "principal": "Org",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Medium",
+      "evidence": [
+        "spike-keyhive/src/evidence/s4.md"
+      ],
+      "escape_hatch": null,
+      "salvage_notes": "Rotation cascade: on org membership change OR org-member key rotation, walk the spike-maintained reverse-index (org_group_id -> Vec<DocumentId>) and call keyhive.force_pcs_update(doc) on each affected doc.",
+      "notes": "Reverse-index 'org -> docs' is maintained by spike code (not Keyhive). Phase 3 effort Medium reflects the index-maintenance code paths. Same reverse-lookup gap as gate 5 (foundation-layer concern)."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 5,
+      "sub_flow": "E1",
+      "principal": "Member",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-keyhive/src/evidence/s5.md"
+      ],
+      "escape_hatch": null,
+      "salvage_notes": "PolicyManager.authorise_session(peer_vk, doc) reverse-looks-up peer_vk to MemberId via the adapter cache, checks resolver.is_authorised(member_id, doc).",
+      "notes": "Reverse-lookup gap shared with p2panda — adapter.member_id_for cold lookups need a formal MemberKeyResolver::find_member_by_device method. Push-based termination via on_revocation (better than p2panda pull-based)."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 5,
+      "sub_flow": "E2",
+      "principal": "Org",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-keyhive/src/evidence/s5.md"
+      ],
+      "escape_hatch": null,
+      "salvage_notes": "Same as E1 but resolves org_group.transitive_members().contains_key(&member_id) for the membership check.",
+      "notes": "Builds on gate-4 wrapper. No transport-layer post-open window (Keyhive has no transport — the spike session model is in-process)."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 5,
+      "sub_flow": "F1",
+      "principal": "Member",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-keyhive/src/evidence/s5.md"
+      ],
+      "escape_hatch": null,
+      "salvage_notes": "PolicyListener impl of MembershipListener fires recheck_open_sessions on on_revocation. Push-based termination — latency is single op-propagation, not recheck-cadence-bounded.",
+      "notes": "Better than p2panda — push-based via on_revocation listener vs p2panda pull-based recheck. Open sessions flagged immediately after revocation propagates."
+    },
+    {
+      "library": "Keyhive",
+      "gate": 5,
+      "sub_flow": "F2",
+      "principal": "Org",
+      "severity": "Soft",
+      "failing_subcrate": null,
+      "fix_path": "TraitImpl",
+      "fix_effort": "Small",
+      "phase3_effort": "Small",
+      "evidence": [
+        "spike-keyhive/src/evidence/s5.md"
+      ],
+      "escape_hatch": null,
+      "salvage_notes": "Same as F1 plus the gate-4 reverse-index walk to flag all sessions whose doc is org-granted.",
+      "notes": "Cascade flow: on org member change, flag all sessions for all docs where the org has access. Reuses the gate-4 reverse-index."
+    }
+  ]
+}

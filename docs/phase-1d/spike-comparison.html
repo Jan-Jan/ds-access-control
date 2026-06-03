@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>p2panda vs Keyhive — ODS Phase 1.d head-to-head</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #555;
+    --bg: #fafafa;
+    --accent: #1a5fb4;
+    --hard: #c01c28;
+    --soft: #b58900;
+    --none: #2ec27e;
+    --rule: #ddd;
+    --code-bg: #f1f1f1;
+    --table-stripe: #f5f5f5;
+    --panda: #6f3a90;
+    --keyhive: #1a805e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 0;
+  }
+  main {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 40px 32px 60px;
+    background: white;
+    border-left: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
+  }
+  header.doc {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 16px;
+    margin-bottom: 32px;
+  }
+  header.doc h1 { margin: 0 0 4px; font-size: 26px; color: var(--accent); }
+  header.doc .subtitle { color: var(--muted); margin: 0; }
+  header.doc .meta {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  h2 {
+    font-size: 20px;
+    margin: 36px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--accent);
+  }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  h4 { font-size: 14px; margin: 16px 0 6px; color: var(--muted); }
+  p { margin: 8px 0; }
+  ul, ol { padding-left: 24px; margin: 8px 0; }
+  li { margin: 4px 0; }
+  code, kbd {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12.5px;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 12px 14px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.4;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th { background: #eee; font-weight: 600; }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+  .sev-hard { color: var(--hard); font-weight: 600; }
+  .sev-soft { color: var(--soft); font-weight: 600; }
+  .sev-none { color: var(--none); font-weight: 600; }
+  .panda { color: var(--panda); font-weight: 600; }
+  .keyhive { color: var(--keyhive); font-weight: 600; }
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: #eef4fb;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .callout.warn { border-left-color: var(--hard); background: #fbeeee; }
+  .callout.note { border-left-color: var(--soft); background: #fcf6e6; }
+  .callout.win { border-left-color: var(--none); background: #eaf7f0; }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .toc {
+    background: #f4f4f4;
+    padding: 12px 16px 12px 36px;
+    border-radius: 4px;
+    margin-bottom: 24px;
+  }
+  .toc ol { margin: 4px 0; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .versus-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .versus-card {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 16px;
+    background: var(--bg);
+  }
+  .versus-card.panda { border-top: 4px solid var(--panda); }
+  .versus-card.keyhive { border-top: 4px solid var(--keyhive); }
+  .versus-card h3 { margin: 0 0 8px; }
+  .versus-card .big {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 4px 0;
+  }
+  .versus-card .panda { color: var(--panda); }
+  .versus-card .keyhive { color: var(--keyhive); }
+  .compare-table th:nth-child(1) { width: 14%; }
+  .compare-table th:nth-child(2),
+  .compare-table th:nth-child(3) { width: 43%; }
+  .compare-table .panda-col { background: #f7f2fb; }
+  .compare-table .keyhive-col { background: #effaf5; }
+  .winner-cell { background: #d8f1e3 !important; font-weight: 600; }
+  footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: 12px;
+  }
+  @media print {
+    body { background: white; }
+    main { border: none; max-width: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header class="doc">
+  <h1>p2panda vs Keyhive</h1>
+  <p class="subtitle">ODS Phase 1.d — library qualification head-to-head</p>
+  <p class="meta">
+    p2panda pin: <code>41559b0dfc2d7d0e9e4fba251ceb7f8094ff8be1</code> (2026-05-20)<br>
+    Keyhive pin: <code>a2876f3c79d89c9dd0c5e9f84802611c716fe27e</code> (2026-05-22)<br>
+    Spike branch: <code>worktree-spike-phase-1d</code><br>
+    Report date: 2026-06-02 (revised 2026-06-03 after lazy-CGKA design commitment)
+  </p>
+</header>
+
+<div class="callout note">
+  <p><strong>Revision history.</strong> The first release of this
+  report (2026-06-02 morning) was based on API-evidence analysis only;
+  Keyhive burden 22, delta −31 %. After the running-code milestone
+  surfaced that <code>Keyhive::add_member</code>'s convenience path
+  requires a signed <code>KeyOp</code>/<code>ContactCard</code>, an
+  interim revision (2026-06-02 evening) raised gate 1's
+  <code>phase3_effort</code> to Medium; burden 24, delta −25 %.
+  </p>
+  <p>On <strong>2026-06-03</strong>, ODS committed to a
+  <strong>lazy-CGKA / two-tier design</strong> (see §5.1) that operates
+  below the high-level <code>add_member</code> API — the trie carries
+  only the long-term <code>VerifyingKey</code>, and CGKA placement is
+  deferred to the new member's own client at come-online. Gate 1's
+  <code>phase3_effort</code> reverts to Small; <strong>burden 22, delta
+  −31 %</strong>. The interim running-code finding is now a footnote
+  about the convenience API, not an ODS architectural requirement.</p>
+</div>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#summary">Executive summary</a></li>
+    <li><a href="#scorecard">Scorecard — burden side by side</a></li>
+    <li><a href="#gate-by-gate">Gate-by-gate comparison</a></li>
+    <li><a href="#deep-dives">Deep dives</a>
+      <ol>
+        <li><a href="#wasm">WASM / no_std story</a></li>
+        <li><a href="#stable-id">Stable-ID ACL approach</a></li>
+        <li><a href="#op-intercept">Op interception</a></li>
+        <li><a href="#cgka">CGKA primitive</a></li>
+        <li><a href="#org-pseudo">Org-as-pseudo-group</a></li>
+        <li><a href="#p2p">P2P policy</a></li>
+      </ol>
+    </li>
+    <li><a href="#fork-policy">Fork-locally policy — implications</a>
+      <ol>
+        <li><a href="#running-code">Running-code milestone (revision)</a></li>
+      </ol>
+    </li>
+    <li><a href="#trade-offs">Trade-offs and risks (beyond the gap matrix)</a></li>
+    <li><a href="#recommendation">Recommendation</a></li>
+  </ol>
+</nav>
+
+<!-- =========================================================== -->
+<section id="summary">
+<h2>1. Executive summary</h2>
+
+<p>
+  Two local-first stacks (p2panda, Keyhive) were independently evaluated
+  against six substitution gates required by the ODS design (stable-ID ACL
+  with resolver-driven keys, library-native mutation interception, CGKA
+  rotation on trie change, organisation-as-pseudo-group, p2p connection
+  policy, plus the WASM / no_std compile gate). Both libraries are
+  <strong>viable Phase 3 substrates</strong>. The differences are bounded
+  but real, and they favour Keyhive on most axes — with one significant
+  caveat (alpha stability).
+</p>
+
+<div class="versus-grid">
+  <div class="versus-card panda">
+    <h3 class="panda">p2panda</h3>
+    <p class="meta">v0.5.2 at <code>41559b0</code></p>
+    <div class="big panda">32</div>
+    <p>WASM burden (no WASM: 20). 5 Hard rows, 6 Soft. One Large fork of
+    <code>p2panda-sync</code> required for WASM. Three of the four
+    no-WASM Hard rows share a single one-line <code>pub use</code> fork
+    patch in <code>p2panda-spaces</code>.</p>
+  </div>
+  <div class="versus-card keyhive">
+    <h3 class="keyhive">Keyhive</h3>
+    <p class="meta">v0.0.0-alpha.3 at <code>a2876f3c</code></p>
+    <div class="big keyhive">22</div>
+    <p>WASM burden (no WASM: 22). 1 Hard row, 9 Soft. No forks required
+    on any axis. Gate 0 scores <span class="sev-none">None</span> — all
+    three Keyhive sub-crates compile cleanly to wasm32 with the
+    standard getrandom workaround. Gate-1 <code>phase3_effort</code>
+    is Small under the lazy-CGKA design (§5.1).</p>
+  </div>
+</div>
+
+<div class="callout win">
+  <p><strong>Headline.</strong> Keyhive has a <strong>−31 % lower
+  WASM-included burden</strong> than p2panda (22 vs 32) and requires
+  <strong>zero forks</strong> for any gate. The biggest single saving
+  is gate 0 (no forks vs one Large fork of p2panda-sync). The second
+  largest is gate 4 org-as-pseudo-group (<span class="sev-soft">Soft</span>
+  vs <span class="sev-hard">Hard</span>).</p>
+</div>
+
+<div class="callout warn">
+  <p><strong>Counterweight.</strong> p2panda is at <code>0.5.2</code> with
+  an audit-in-progress; Keyhive is at <code>0.0.0-alpha.3</code> with no
+  audit. p2panda's API has churned in the last 30 days (<code>bb62866</code>
+  rename); Keyhive's is also moving (<code>1116eaf</code> transitive
+  delegation, <code>f162854</code> serialization). The burden delta is
+  real, but Keyhive's library is materially less mature.</p>
+</div>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="scorecard">
+<h2>2. Scorecard — burden side by side</h2>
+
+<table class="compare-table">
+  <thead>
+    <tr><th>Metric</th><th class="panda-col">p2panda</th><th class="keyhive-col">Keyhive</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Hard rows</td>
+      <td class="panda-col">5</td>
+      <td class="keyhive-col winner-cell">1</td>
+    </tr>
+    <tr>
+      <td>Soft rows</td>
+      <td class="panda-col winner-cell">6</td>
+      <td class="keyhive-col">9</td>
+    </tr>
+    <tr>
+      <td>Total burden (with WASM)</td>
+      <td class="panda-col">32</td>
+      <td class="keyhive-col winner-cell">22</td>
+    </tr>
+    <tr>
+      <td>Total burden (no WASM)</td>
+      <td class="panda-col winner-cell">20</td>
+      <td class="keyhive-col">22</td>
+    </tr>
+    <tr>
+      <td>Forks required (WASM)</td>
+      <td class="panda-col">2 (one Large, one Small)</td>
+      <td class="keyhive-col winner-cell">0</td>
+    </tr>
+    <tr>
+      <td>Forks required (no WASM)</td>
+      <td class="panda-col">1 (Small)</td>
+      <td class="keyhive-col winner-cell">0</td>
+    </tr>
+    <tr>
+      <td>Library version</td>
+      <td class="panda-col winner-cell">0.5.2 (pre-1.0)</td>
+      <td class="keyhive-col">0.0.0-alpha.3</td>
+    </tr>
+    <tr>
+      <td>Audit status</td>
+      <td class="panda-col winner-cell">ROS audit scheduled</td>
+      <td class="keyhive-col">No audit</td>
+    </tr>
+    <tr>
+      <td>Published transport</td>
+      <td class="panda-col winner-cell">p2panda-net (iroh) — Hard at WASM</td>
+      <td class="keyhive-col">None (Beelay unpublished)</td>
+    </tr>
+    <tr>
+      <td>CGKA asymptotic cost</td>
+      <td class="panda-col">DCGKA O(n)</td>
+      <td class="keyhive-col winner-cell">BeeKEM O(log n)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="meta">Cells marked <span style="background: #d8f1e3; padding: 1px 6px; border-radius: 3px;">green</span>
+favour that library; ties or context-dependent cells are unmarked.</p>
+
+<p><strong>Reading the score:</strong> Keyhive wins on every quantitative
+burden axis. p2panda wins on every <em>library maturity</em> axis. The
+decision is a trade-off between burden today and maturity today.</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="gate-by-gate">
+<h2>3. Gate-by-gate comparison</h2>
+
+<table class="compare-table">
+  <thead>
+    <tr>
+      <th>Gate</th>
+      <th class="panda-col">p2panda</th>
+      <th class="keyhive-col">Keyhive</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>0</strong> — WASM/no_std</td>
+      <td class="panda-col">
+        <span class="sev-hard">Hard</span> (<code>p2panda-sync</code> fork Large).
+        5 of 6 sub-crates pass; <code>p2panda-sync</code> pulls <code>mio 1.2.0</code>
+        unconditionally via tokio default features — std-only I/O poller, zero wasm
+        support.
+      </td>
+      <td class="keyhive-col winner-cell">
+        <span class="sev-none">None</span>. All three Keyhive sub-crates
+        (<code>keyhive_crypto</code>, <code>beekem</code>, <code>keyhive_core</code>)
+        compile cleanly to wasm32. Inventory predicted DEFINITE FAIL for
+        <code>keyhive_core</code>; actual outcome PASS.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>1</strong> — Stable-ID ACL</td>
+      <td class="panda-col">
+        <span class="sev-hard">Hard</span> at <code>p2panda-spaces</code>.
+        Salvage via <code>TraitImpl</code>:
+        <code>materialise_actor_id(resolver, principal) → ActorId</code>
+        plus <code>ResolverPki&lt;R&gt;</code> implementing
+        <code>IdentityRegistry</code>.
+        Positive surprise: <code>From&lt;VerifyingKey&gt; for ActorId</code> is public.
+      </td>
+      <td class="keyhive-col">
+        <span class="sev-hard">Hard</span> at <code>keyhive_core</code>.
+        Salvage: ~30-line <code>IdAdapter</code> in
+        <code>spike-keyhive/src/adapter.rs</code>.
+        <code>Identifier(pub VerifyingKey)</code> has a pub field —
+        cleaner than p2panda's <code>pub(crate)</code> friction.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>2</strong> — Op interception</td>
+      <td class="panda-col">
+        <span class="sev-hard">Hard</span> at <code>p2panda-spaces</code>.
+        Requires a <strong>one-line fork</strong>:
+        <code>pub use types::AuthGroupState;</code> to expose a private type.
+        <code>p2panda-auth</code> alone is <span class="sev-none">None</span>
+        (Groups trait is externally implementable).
+      </td>
+      <td class="keyhive-col winner-cell">
+        <span class="sev-soft">Soft</span> at <code>keyhive_core</code>.
+        <code>MembershipListener</code> is post-fact (cannot block).
+        <code>DelegationStore</code> is concrete (no custom impl).
+        Substitution is <strong>containment-via-wrapper</strong> — no fork.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>3</strong> — CGKA rotation</td>
+      <td class="panda-col">
+        <span class="sev-soft">Soft</span> × 2 (Flows B + C).
+        Custom <code>IdentityRegistry&lt;ID, Y&gt;</code> + <code>PreKeyRegistry</code>
+        + <code>KeyRegistry&lt;MemberId&gt;</code> repopulated from the resolver.
+        Integration finding: revocation requires <code>Dcgka::remove</code>, not
+        <code>Dcgka::update</code> (sends DMs to removed peers).
+      </td>
+      <td class="keyhive-col winner-cell">
+        <span class="sev-soft">Soft</span> × 2 (Flows B + C).
+        <code>Cgka::add(id, pk, signer)</code> takes the key as a direct argument —
+        no trait-thread pattern. Rotation via
+        <code>Keyhive::force_pcs_update(doc)</code>. Cgka::remove and Cgka::update
+        are distinct entry points — no integration finding.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>4</strong> — Org-as-pseudo-group</td>
+      <td class="panda-col">
+        <span class="sev-hard">Hard</span> × 2 (Flow A + Flow C, both Org).
+        <code>p2panda-spaces::Group::add(member: ActorId)</code> only accepts
+        individuals — nested groups need the same one-line fork as gate 2.
+        Auth layer alone is <span class="sev-none">None</span> (GroupCrdt
+        auto-resolves <code>GroupMember::Group</code>).
+      </td>
+      <td class="keyhive-col winner-cell">
+        <span class="sev-soft">Soft</span> × 2.
+        <code>Agent::Group(GroupId, ...)</code> is a first-class variant.
+        <code>add_member</code> accepts ANY <code>Agent</code> variant with
+        identical signature. <code>Document::transitive_members()</code>
+        auto-resolves nested groups. <strong>No fork needed.</strong>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>5</strong> — P2P policy</td>
+      <td class="panda-col">
+        <span class="sev-soft">Soft</span> × 4 (E1/E2/F1/F2).
+        <code>PolicyManager</code> wraps <code>p2panda-sync::Manager&lt;T&gt;</code>.
+        Pre-open accept/reject via <code>SessionConfig::remote: VerifyingKey</code>.
+        Termination is <strong>pull-based</strong> via periodic
+        <code>recheck_open_sessions</code>.
+      </td>
+      <td class="keyhive-col winner-cell">
+        <span class="sev-soft">Soft</span> × 4 (E1/E2/F1/F2).
+        Custom <code>PolicyManager</code> + in-process session model (no
+        published transport). Termination is <strong>push-based</strong>
+        via <code>MembershipListener::on_revocation</code>. Same reverse-lookup
+        gap as p2panda (foundation-layer concern).
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Across all six gates, Keyhive ties or wins. The single ties are at
+  gate 1 (both Hard but Keyhive's salvage is mechanically cleaner) and at
+  gate 5 (both 4×Soft but Keyhive's termination is push-based, latency
+  is lower).
+</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="deep-dives">
+<h2>4. Deep dives</h2>
+
+<h3 id="wasm">4.1 WASM / no_std story</h3>
+
+<p>
+  The Phase 1.d brief lists "WASM compile" as a workspace convention
+  (matching <code>org-members</code>). Both spikes evaluated this.
+</p>
+
+<table>
+  <thead>
+    <tr><th></th><th class="panda-col">p2panda</th><th class="keyhive-col">Keyhive</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Crates compiling clean</td>
+      <td class="panda-col">5 of 6 (core, auth, encryption, spaces, net <code>--no-default-features</code>)</td>
+      <td class="keyhive-col winner-cell">3 of 3 (crypto, beekem, core)</td>
+    </tr>
+    <tr>
+      <td>Crates failing wasm32</td>
+      <td class="panda-col">1 (<code>p2panda-sync</code> — <code>mio 1.2.0</code> via tokio default features)</td>
+      <td class="keyhive-col winner-cell">0</td>
+    </tr>
+    <tr>
+      <td>Workaround in consumer Cargo.toml</td>
+      <td class="panda-col">Dual <code>getrandom</code> pin (0.2/js + 0.3/wasm_js)</td>
+      <td class="keyhive-col winner-cell">Single <code>getrandom</code> pin (0.2/js)</td>
+    </tr>
+    <tr>
+      <td>Fork required</td>
+      <td class="panda-col">Yes — Large (swap tokio for tokio_with_wasm in p2panda-sync)</td>
+      <td class="keyhive-col winner-cell">No</td>
+    </tr>
+    <tr>
+      <td>Inventory hypothesis</td>
+      <td class="panda-col">Confirmed (split outcome predicted)</td>
+      <td class="keyhive-col">REJECTED — keyhive_core unexpectedly clean</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Why Keyhive wins.</strong> Keyhive has fewer subcrates AND a
+  simpler dep tree. It has no published transport at the pin (Beelay is
+  not yet released), so it cannot fail on a transport-layer std-only dep
+  the way p2panda-sync does. The cost of Keyhive's "no transport" is paid
+  separately (gate 5 requires a custom session model), but on the
+  pure-compile axis, fewer transitive deps means fewer wasm-incompatible
+  ones.
+</p>
+
+<h3 id="stable-id">4.2 Stable-ID ACL approach</h3>
+
+<p>
+  Both libraries hardwire principal identity to <code>ed25519_dalek::VerifyingKey</code>
+  at the type level. Neither offers a generic-ID escape hatch at the
+  public surface. The salvage mechanisms differ:
+</p>
+
+<table>
+  <thead>
+    <tr><th></th><th class="panda-col">p2panda</th><th class="keyhive-col">Keyhive</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Principal type</td>
+      <td class="panda-col"><code>ActorId(pub(crate) VerifyingKey)</code></td>
+      <td class="keyhive-col winner-cell"><code>Identifier(pub VerifyingKey)</code></td>
+    </tr>
+    <tr>
+      <td>Construction from <code>VerifyingKey</code></td>
+      <td class="panda-col">Via public <code>From&lt;VerifyingKey&gt; for ActorId</code></td>
+      <td class="keyhive-col winner-cell">Direct: pub field</td>
+    </tr>
+    <tr>
+      <td>Salvage shape</td>
+      <td class="panda-col"><code>materialise_actor_id</code> + <code>ResolverPki&lt;R&gt;</code></td>
+      <td class="keyhive-col winner-cell"><code>IdAdapter</code> (~30 LOC, single module)</td>
+    </tr>
+    <tr>
+      <td>Multi-layer touchpoints</td>
+      <td class="panda-col">Spaces (gate 1) + Encryption (gate 3 PKI threading)</td>
+      <td class="keyhive-col winner-cell">Single touchpoint (the adapter; threaded uniformly)</td>
+    </tr>
+    <tr>
+      <td>Severity</td>
+      <td class="panda-col"><span class="sev-hard">Hard</span></td>
+      <td class="keyhive-col"><span class="sev-hard">Hard</span></td>
+    </tr>
+    <tr>
+      <td>Fix effort</td>
+      <td class="panda-col">Small</td>
+      <td class="keyhive-col">Small</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Both score Hard for the same architectural reason — the delegation log
+  holds raw VerifyingKeys, so a MemberId rotation needs an explicit
+  cascade (driven by gate 3). The difference is mechanical: Keyhive's
+  salvage is one module; p2panda's is two cooperating constructs.
+</p>
+
+<h3 id="op-intercept">4.3 Op interception</h3>
+
+<p>
+  Both libraries expose mutation entry points that the ODS design needs
+  to neutralise (only the on-chain trie is authoritative).
+</p>
+
+<table>
+  <thead>
+    <tr><th></th><th class="panda-col">p2panda</th><th class="keyhive-col">Keyhive</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Auth/library-internal trait</td>
+      <td class="panda-col"><code>Groups</code> (externally implementable — None)</td>
+      <td class="keyhive-col"><code>MembershipListener</code> (post-fact — cannot block)</td>
+    </tr>
+    <tr>
+      <td>Store-level intercept</td>
+      <td class="panda-col">Blocked: <code>AuthGroupState&lt;C&gt;</code> in private module</td>
+      <td class="keyhive-col">Blocked: <code>DelegationStore</code> is concrete field</td>
+    </tr>
+    <tr>
+      <td>Spike's actual intercept</td>
+      <td class="panda-col"><code>BlockingGroups&lt;Inner&gt;</code> at auth layer; fork patch for spaces</td>
+      <td class="keyhive-col winner-cell">Containment-via-wrapper (no fork)</td>
+    </tr>
+    <tr>
+      <td>Fork required</td>
+      <td class="panda-col">Yes — <strong>one-line</strong> <code>pub use types::AuthGroupState;</code></td>
+      <td class="keyhive-col winner-cell">No</td>
+    </tr>
+    <tr>
+      <td>Severity</td>
+      <td class="panda-col"><span class="sev-hard">Hard</span></td>
+      <td class="keyhive-col winner-cell"><span class="sev-soft">Soft</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Why p2panda's single line of fork matters.</strong> Under the
+  fork-locally policy, even a one-line fork ships as a vendored copy of
+  the affected crate. The line itself is trivial; the maintenance cost
+  is real (pinning, re-syncing on upstream releases). Keyhive's
+  containment-via-wrapper avoids all of that — at the cost of relying
+  on the wrapper not leaking the inner Keyhive handle (which is a
+  hygiene concern any production codebase would address anyway).
+</p>
+
+<h3 id="cgka">4.4 CGKA primitive</h3>
+
+<p>
+  The CGKA layer is where the two libraries differ most architecturally.
+</p>
+
+<table>
+  <thead>
+    <tr><th></th><th class="panda-col">p2panda DCGKA</th><th class="keyhive-col">Keyhive BeeKEM</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Asymptotic cost per update</td>
+      <td class="panda-col">O(n)</td>
+      <td class="keyhive-col winner-cell">O(log n)</td>
+    </tr>
+    <tr>
+      <td>Key injection seam</td>
+      <td class="panda-col"><code>IdentityRegistry&lt;ID, Y&gt;</code> trait + threaded <code>PKI</code> generic</td>
+      <td class="keyhive-col winner-cell">Direct argument: <code>Cgka::add(id, pk, signer)</code></td>
+    </tr>
+    <tr>
+      <td>Rotation entry point</td>
+      <td class="panda-col"><code>Dcgka::update</code> (sends DMs to all DGM)</td>
+      <td class="keyhive-col winner-cell"><code>Cgka::update</code> or <code>Keyhive::force_pcs_update</code></td>
+    </tr>
+    <tr>
+      <td>Removal distinct from rotation?</td>
+      <td class="panda-col">Yes, but the spike found a footgun: <code>update</code> includes removed members in DM set — must use <code>remove</code> for revocation.</td>
+      <td class="keyhive-col winner-cell">Yes, distinct entry points (<code>Cgka::remove(id, signer)</code>) — no footgun</td>
+    </tr>
+    <tr>
+      <td>Integration findings</td>
+      <td class="panda-col">Documented (revocation must use remove)</td>
+      <td class="keyhive-col winner-cell">None</td>
+    </tr>
+    <tr>
+      <td>Severity</td>
+      <td class="panda-col">Soft × 2</td>
+      <td class="keyhive-col">Soft × 2</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Headline.</strong> Same severity (both Soft), but Keyhive's API
+  is mechanically simpler and avoids a known footgun. Plus the asymptotic
+  advantage: for an org of 1 000 members, Keyhive rotates in ~10 ops vs
+  p2panda's ~1 000.
+</p>
+
+<h3 id="org-pseudo">4.5 Org-as-pseudo-group</h3>
+
+<div class="callout win">
+  <p><strong>Largest single Keyhive-vs-p2panda differentiator in the
+  Phase 1.d data.</strong> p2panda scored Hard × 2 (both Flow A and Flow C
+  for the Org principal); Keyhive scored Soft × 2.</p>
+</div>
+
+<table>
+  <thead>
+    <tr><th></th><th class="panda-col">p2panda</th><th class="keyhive-col">Keyhive</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>First-class nested group</td>
+      <td class="panda-col">At <code>p2panda-auth</code> only — <code>GroupMember::Group(ID)</code> exists, <code>members()</code> auto-resolves</td>
+      <td class="keyhive-col winner-cell">At <code>keyhive_core</code> — <code>Agent::Group</code> is a first-class enum variant; <code>add_member</code> accepts ANY <code>Agent</code></td>
+    </tr>
+    <tr>
+      <td>Spaces-layer / top-layer support</td>
+      <td class="panda-col"><code>Space::add(member: ActorId)</code> doesn't accept nested groups → fork required</td>
+      <td class="keyhive-col winner-cell">Identical call signature for individual vs group</td>
+    </tr>
+    <tr>
+      <td>Transitive resolution</td>
+      <td class="panda-col"><code>GroupCrdt::members()</code> at auth layer</td>
+      <td class="keyhive-col winner-cell"><code>Document::transitive_members()</code> at top layer</td>
+    </tr>
+    <tr>
+      <td>Rotation cascade</td>
+      <td class="panda-col">Implemented via <code>effective_member_keys</code> + DCGKA recompute</td>
+      <td class="keyhive-col">Reverse-index (org→docs) maintained by wrapper + <code>force_pcs_update</code></td>
+    </tr>
+    <tr>
+      <td>Fork required</td>
+      <td class="panda-col">Yes (Flow A + Flow C share root cause with gate 2)</td>
+      <td class="keyhive-col winner-cell">No</td>
+    </tr>
+    <tr>
+      <td>Severity</td>
+      <td class="panda-col"><span class="sev-hard">Hard</span> × 2</td>
+      <td class="keyhive-col winner-cell"><span class="sev-soft">Soft</span> × 2</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="p2p">4.6 P2P policy</h3>
+
+<table>
+  <thead>
+    <tr><th></th><th class="panda-col">p2panda</th><th class="keyhive-col">Keyhive</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Transport available at pin</td>
+      <td class="panda-col winner-cell">Yes — <code>p2panda-net</code> wrapping iroh QUIC</td>
+      <td class="keyhive-col">No — Beelay not yet published</td>
+    </tr>
+    <tr>
+      <td>Session-establish hook</td>
+      <td class="panda-col"><code>SessionConfig::remote: VerifyingKey</code> at <code>p2panda-sync::Manager</code> level</td>
+      <td class="keyhive-col">In-process — defined by the spike</td>
+    </tr>
+    <tr>
+      <td>Termination mechanism</td>
+      <td class="panda-col">Pull-based: periodic <code>recheck_open_sessions</code></td>
+      <td class="keyhive-col winner-cell">Push-based: <code>MembershipListener::on_revocation</code></td>
+    </tr>
+    <tr>
+      <td>Termination latency</td>
+      <td class="panda-col">Bounded by recheck cadence</td>
+      <td class="keyhive-col winner-cell">Single op-propagation hop</td>
+    </tr>
+    <tr>
+      <td>Post-open window</td>
+      <td class="panda-col">Real (iroh handshake completes before sync-layer reject)</td>
+      <td class="keyhive-col winner-cell">N/A (no transport — spike-only model)</td>
+    </tr>
+    <tr>
+      <td>Reverse-lookup gap</td>
+      <td class="panda-col">Yes</td>
+      <td class="keyhive-col">Yes (same)</td>
+    </tr>
+    <tr>
+      <td>Severity</td>
+      <td class="panda-col">Soft × 4</td>
+      <td class="keyhive-col">Soft × 4</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Context-dependent.</strong> p2panda wins on "transport available
+  today" (production-ready iroh integration). Keyhive wins on
+  "termination latency" (push-based) and avoids p2panda's iroh-handshake
+  post-open window — but only because Keyhive has no transport at all,
+  shifting that work to the consumer. Net: tie, with different trade-offs.
+</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="fork-policy">
+<h2>5. Fork-locally policy — implications</h2>
+
+<p>
+  The project's standing policy
+  (<code>project_p2panda_fork_policy.md</code>, 2026-05-28) is that
+  upstream PRs to p2panda are not allowed until the spike demonstrates
+  value. Every Hard gap-matrix row for p2panda therefore lands as a
+  local fork. The same policy applies to Keyhive by extension.
+</p>
+
+<table>
+  <thead>
+    <tr><th>Library</th><th>Fork count</th><th>Fork crates / lines</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="panda-col">p2panda (no WASM)</td>
+      <td class="panda-col">1</td>
+      <td class="panda-col">
+        <code>p2panda-spaces</code> — single line
+        (<code>pub use types::AuthGroupState;</code>) covering gates 2, 4A, 4C.
+      </td>
+    </tr>
+    <tr>
+      <td class="panda-col">p2panda (with WASM)</td>
+      <td class="panda-col">2</td>
+      <td class="panda-col">
+        Above + <code>p2panda-sync</code> (Large — swap tokio for
+        <code>tokio_with_wasm</code>).
+      </td>
+    </tr>
+    <tr>
+      <td class="keyhive-col">Keyhive (no WASM)</td>
+      <td class="keyhive-col winner-cell">0</td>
+      <td class="keyhive-col">—</td>
+    </tr>
+    <tr>
+      <td class="keyhive-col">Keyhive (with WASM)</td>
+      <td class="keyhive-col winner-cell">0</td>
+      <td class="keyhive-col">—</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Maintenance cost.</strong> A vendored fork ships as a copy of
+  the affected crate in the workspace. Re-syncing on every upstream
+  release is real engineering work. p2panda requires this work; Keyhive
+  does not.
+</p>
+
+<h3 id="running-code">5.1 Running-code milestone &amp; lazy-CGKA design</h3>
+
+<p>
+  After the API-evidence comparison shipped, Keyhive's gate substitutions
+  were implemented as running Rust code in <code>spike-keyhive/</code>.
+  This converted analytical claims into executable evidence, surfaced a
+  high-level-API observation at gate 1, and ultimately led to an ODS
+  design commitment that resolves it cleanly (lazy CGKA, recorded below).
+</p>
+
+<table>
+  <thead>
+    <tr><th>Spike artefact</th><th>Status</th><th>Tests</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>src/adapter.rs</code> — <code>IdAdapter</code></td>
+      <td><span class="sev-none">runs</span></td>
+      <td>6 unit</td>
+    </tr>
+    <tr>
+      <td><code>src/s1_stable_id_acl.rs</code> — <code>SpikeKeyhive</code> alias, <code>generate_spike_keyhive</code>, <code>ContactCardForge</code></td>
+      <td><span class="sev-none">runs</span></td>
+      <td>2 unit + 2 L2 integration</td>
+    </tr>
+    <tr>
+      <td><code>src/s2_membership_intercept.rs</code> — <code>KeyhiveWrapper</code></td>
+      <td><span class="sev-none">runs</span></td>
+      <td>2 unit</td>
+    </tr>
+    <tr>
+      <td><code>src/s3_cgka_rotation.rs</code> — <code>rotate_on_trie_change</code></td>
+      <td><span class="sev-none">runs</span></td>
+      <td>2 unit</td>
+    </tr>
+    <tr>
+      <td><code>src/s4_org_pseudo_group.rs</code> — <code>generate_org_group</code>, <code>grant_org_to_doc</code></td>
+      <td><span class="sev-none">runs</span></td>
+      <td>1 unit</td>
+    </tr>
+    <tr>
+      <td><code>src/s5_p2p_policy.rs</code> — <code>PolicyManager</code></td>
+      <td><span class="sev-none">runs</span></td>
+      <td>5 unit</td>
+    </tr>
+    <tr>
+      <td><code>tests/l3_revocation.rs</code> — two-party forward security</td>
+      <td><span class="sev-none">runs</span></td>
+      <td>1 L3</td>
+    </tr>
+    <tr>
+      <td><code>tests/l3_gating.rs</code> — session termination on revoke</td>
+      <td><span class="sev-none">runs</span></td>
+      <td>1 L3</td>
+    </tr>
+    <tr>
+      <td><code>tests/l3_org_pseudo_group.rs</code> — org grants + cascade rotation</td>
+      <td><span class="sev-none">runs</span></td>
+      <td>1 L3</td>
+    </tr>
+    <tr>
+      <td><code>tests/l3_lazy_onboarding.rs</code> — lazy add + history re-transmission</td>
+      <td><span class="sev-none">runs</span></td>
+      <td>1 L3</td>
+    </tr>
+    <tr>
+      <td><strong>spike-keyhive total</strong></td>
+      <td><strong><span class="sev-none">24/24 pass</span></strong></td>
+      <td><strong>18 lib + 2 L2 + 4 L3</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>High-level-API observation (gate 1, 2026-06-02).</strong>
+Keyhive's <code>Individual::new(initial_op: KeyOp)</code> requires a
+signed <code>KeyOp</code> (i.e., a <code>ContactCard</code>), not a
+bare <code>VerifyingKey</code>. The convenience path
+<code>Keyhive::add_member(Agent::Individual, ...)</code> therefore
+needs the new member's prekey at add-time. p2panda has the symmetric
+property: <code>manager.add_member(member_id, key_bundle)</code> takes
+a <code>LongTermKeyBundle</code> at add-time. Both libraries' top-level
+"add member" entry points eagerly place the new member in the CGKA
+tree and so depend on having the prekey on-hand.</p>
+
+<p><strong>ODS design commitment — lazy CGKA / two-tier separation
+(2026-06-03).</strong> The eager-add path is unsuitable for ODS
+because publishing prekeys per-member to the trie would mean on-chain
+writes per prekey rotation. The committed design instead splits:</p>
+
+<ul>
+  <li><strong>ACL tier (trie, on-chain).</strong> Records
+  <code>(MemberId, VerifyingKey)</code>. Updated only on onboarding
+  and rotation/revocation. No prekey/ContactCard publication.</li>
+  <li><strong>CGKA tier (per-doc BeeKEM, off-chain).</strong>
+  Encryption-tree state, contains only currently-online members'
+  x25519 leaf keys. Mutated per-write and per-rotation.</li>
+</ul>
+
+<p>The flow:</p>
+
+<ol>
+  <li><em>Grant.</em> Alice grants bob ACL access on doc D. Trie
+  records the delegation against bob's <code>VerifyingKey</code>. Bob
+  may be offline. No CGKA mutation, no prekey needed.</li>
+  <li><em>Come-online self-add.</em> Bob's client sees the delegation,
+  fetches doc D's CGKA state, generates a fresh x25519 leaf, commits a
+  self-add to BeeKEM (signed by bob, authorised by the delegation).</li>
+  <li><em>History transfer.</em> Bob asks an already-authorised peer
+  for the document's history. ODS's existing
+  encryption-at-rest / encryption-in-transit split makes this safe:
+  the peer has plaintext at-rest and retransmits under the current
+  CGKA epoch (which bob is now in) — no privilege extension.</li>
+  <li><em>Revocation.</em> Trie revokes bob. Existing members commit
+  a CGKA update; bob's leaf rotates out; fresh <code>PcsKey</code>
+  delivers forward security on the new epoch.</li>
+</ol>
+
+<p>This descends below both libraries' convenience APIs: Keyhive uses
+<code>keyhive_core</code> delegation log + <code>beekem::Cgka::add</code>
+directly; p2panda uses <code>GroupCrdt</code> + <code>Dcgka::*</code>
+directly. Both sub-crate decompositions are already available at the
+pinned SHAs.</p>
+
+<p><strong>Burden re-pin (gate 1).</strong> Under the lazy-CGKA design
+the trie carries only the long-term <code>VerifyingKey</code> — no
+contact-card publication channel needed. Gate 1's
+<code>phase3_effort</code> reverts to Small for Keyhive (it was already
+Small for p2panda). Keyhive total burden: 22 (delta vs p2panda −31 %).
+The interim 24 / −25 % figure from the 2026-06-02 evening revision is
+superseded.</p>
+
+<p><strong>Spike-evidence status.</strong> The spike's L2/L3 tests
+exercise the high-level <code>add_member</code> path — the mechanisms
+they validate (BeeKEM forward security, <code>Agent::Group</code>
+transitive resolution, <code>MembershipListener</code>-driven session
+termination) are identical under the lazy-CGKA composition.</p>
+
+<p>The dedicated <strong>L3 lazy-onboarding scenario</strong>
+(<code>tests/l3_lazy_onboarding.rs</code>) demonstrates the
+committed design end-to-end:</p>
+
+<ol>
+  <li>Alice creates a doc and writes pre-onboarding content
+  (epoch N, alice-only).</li>
+  <li>Bob comes online, exchanges a contact card, alice grants ACL +
+  CGKA placement (epoch N+1).</li>
+  <li>Alice writes post-onboarding content. Bob decrypts directly.</li>
+  <li>Bob's attempt to decrypt the original pre-onboarding ciphertext
+  <strong>fails</strong> — BeeKEM forward security in the new-member
+  direction; old epochs were never encrypted to bob.</li>
+  <li>Alice re-encrypts the pre-onboarding plaintext (which she has
+  at-rest) under the current epoch. Bob decrypts the retransmission
+  and recovers the original bytes.</li>
+</ol>
+
+<p>All five invariants hold on first run; no integration finding
+surfaced. The test exercises Keyhive's high-level <code>add_member</code>
+entry point for the placement step; the Phase-3 production path will
+descend below it (<code>keyhive_core</code> delegation +
+<code>beekem::Cgka::add</code> directly) so the placement can be driven
+by the new member's own client. The mechanism being validated — BeeKEM
+epoch separation + plaintext re-transmission under the new epoch — is
+identical under both compositions.</p>
+
+<p><strong>Integration finding (gate 3 / L3 revocation).</strong> The
+forward-security invariant is demonstrated end-to-end:
+<code>tests/l3_revocation.rs</code> shows that after
+<code>alice.revoke_member(bob_id, true, &amp;Membered::Document(...))</code>
++ syncing the revocation + new CGKA ops via
+<code>static_events_for_agent</code>, bob's
+<code>try_decrypt_content</code> on a post-revoke ciphertext FAILS, while
+alice can still decrypt both pre and post content. Validates Keyhive's
+production-grade forward-security guarantee in real code.</p>
+
+<p><strong>Integration finding (gate 4 / L3 org).</strong> The L3
+<code>org_pseudo_group</code> scenario confirms that
+<code>Agent::Group(...)</code> grants transitive doc access (bob, as a
+member of alice's org, appears in <code>doc.transitive_members()</code>
+without any explicit per-member grant) and that
+<code>force_pcs_update(doc)</code> emits a signed CGKA op without
+disturbing the org-keyed delegation. Validates the headline gate-4
+differentiator in real code.</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="trade-offs">
+<h2>6. Trade-offs and risks (beyond the gap matrix)</h2>
+
+<table>
+  <thead>
+    <tr><th></th><th class="panda-col">p2panda</th><th class="keyhive-col">Keyhive</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Library maturity</td>
+      <td class="panda-col winner-cell">0.5.2 (pre-1.0 but published); active Parity engagement</td>
+      <td class="keyhive-col">0.0.0-alpha.3; explicitly unaudited</td>
+    </tr>
+    <tr>
+      <td>Audit status</td>
+      <td class="panda-col winner-cell">Radically Open Security audit scheduled</td>
+      <td class="keyhive-col">No audit</td>
+    </tr>
+    <tr>
+      <td>API churn risk (last 30d)</td>
+      <td class="panda-col">High — <code>bb62866</code> "Rename core data types and methods" 2026-05-15</td>
+      <td class="keyhive-col">High — transitive delegation in 1116eaf, serialization in f162854</td>
+    </tr>
+    <tr>
+      <td>Cryptographic primitive</td>
+      <td class="panda-col">DCGKA (Matrix-style); O(n)</td>
+      <td class="keyhive-col winner-cell">BeeKEM (TreeKEM-based); O(log n)</td>
+    </tr>
+    <tr>
+      <td>Transport readiness</td>
+      <td class="panda-col winner-cell">Production-ready (iroh QUIC + gossip)</td>
+      <td class="keyhive-col">Custom required (Beelay unpublished)</td>
+    </tr>
+    <tr>
+      <td>Generics burden</td>
+      <td class="panda-col"><code>Manager&lt;ID, S, K, F, M, C, RS&gt;</code> — 7 params</td>
+      <td class="keyhive-col"><code>Keyhive&lt;F, S, T, P, C, L, R&gt;</code> — 7 params</td>
+    </tr>
+    <tr>
+      <td>Async signer model</td>
+      <td class="panda-col">Sync (signing happens inline)</td>
+      <td class="keyhive-col winner-cell"><code>AsyncSigner&lt;F&gt;</code> — accommodates remote keystores</td>
+    </tr>
+    <tr>
+      <td>Listener model</td>
+      <td class="panda-col">Manual via store traits</td>
+      <td class="keyhive-col winner-cell">Composable: <code>MembershipListener</code> = <code>PrekeyListener</code> + <code>CgkaListener</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>Maturity is the counterweight.</strong> Keyhive wins on burden
+  but loses on maturity. For a system that handles real user data with
+  cryptographic guarantees, an unaudited <code>0.0.0-alpha.3</code> is a
+  significant risk that doesn't show up in the gap-matrix.
+</p>
+
+</section>
+
+<!-- =========================================================== -->
+<section id="recommendation">
+<h2>7. Recommendation</h2>
+
+<div class="callout">
+  <p><strong>Both libraries are viable.</strong> Both libraries demonstrate
+  the three ODS substitutions (stable-ID ACL, X25519 rotation, op
+  interception) in working spike code. There is no architectural
+  showstopper for either.</p>
+</div>
+
+<h3>If burden is the deciding axis — pick Keyhive.</h3>
+<ul>
+  <li>−31 % lower WASM burden (22 vs 32).</li>
+  <li>Zero forks required for any gate.</li>
+  <li>BeeKEM's O(log n) is a long-term scaling advantage.</li>
+  <li>Org-as-pseudo-group, push-based revocation, and async signer model
+    each individually align well with ODS's expected use.</li>
+</ul>
+
+<h3>If maturity / risk is the deciding axis — pick p2panda.</h3>
+<ul>
+  <li>v0.5.2 is materially more advanced than v0.0.0-alpha.3.</li>
+  <li>ROS audit is scheduled.</li>
+  <li>Production-ready transport (iroh) ships today.</li>
+  <li>Active engagement with Parity (the design's authoring org).</li>
+</ul>
+
+<h3>Recommended path forward</h3>
+<ol>
+  <li>
+    <strong>Default recommendation: Keyhive</strong>, on the condition
+    that Phase 3 begins after Keyhive reaches a tagged
+    <code>0.1.0</code> release with at least one external audit. This
+    aligns the burden advantage with a workable maturity story.
+  </li>
+  <li>
+    <strong>Fallback: p2panda</strong>, accepting the WASM-specific
+    Large fork of <code>p2panda-sync</code> and the spaces-layer
+    one-line fork. Phase 3 starts immediately; library risk is lower
+    today.
+  </li>
+  <li>
+    <strong>Bridge option: prototype both</strong>, gating the choice on
+    Keyhive's maturity progress over the next 3–6 months. The
+    spike-common abstraction (<code>MemberKeyResolver</code>,
+    <code>ScenarioFixture</code>, gap-matrix tooling) is library-agnostic
+    by construction — Phase 3 can target either substrate behind the
+    foundation.
+  </li>
+</ol>
+
+<p>
+  <strong>The bridge option costs little.</strong> Both spike crates
+  already exist and target the same foundation. Maintaining
+  parallel implementations through the early Phase 3 phases keeps
+  optionality open until Keyhive's maturity question is settled.
+</p>
+
+</section>
+
+<footer>
+  <p>
+    Comparison report for ODS Phase 1.d.
+    Per-library decisions:
+    <a href="spike-p2panda-decision.md">spike-p2panda-decision.md</a>,
+    <a href="spike-keyhive-decision.md">spike-keyhive-decision.md</a>.
+    Detailed reports:
+    <a href="spike-p2panda-report.html">spike-p2panda-report.html</a>,
+    <a href="spike-keyhive-report.html">spike-keyhive-report.html</a>.
+    See <a href="../superpowers/specs/2026-05-13-ods-phase-1d-library-qualification-design.md">design spec</a>
+    for context.
+  </p>
+</footer>
+
+</main>
+</body>
+</html>
