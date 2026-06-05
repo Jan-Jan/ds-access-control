@@ -1,0 +1,24 @@
+# Paseo Asset Hub fork config for the OrgRegistry deployment sanity check.
+# Endpoint pinned at Stage-1 implementation time; update if Paseo moves.
+endpoint: wss://asset-hub-paseo-rpc.n.dwellir.com
+mock-signature-host: true
+db: ./tmp/chopsticks-paseo-ah.db.sqlite
+runtime-log-level: 1
+# Alice is funded with 1e18 planck on the fork. AccountData fields are
+# enumerated explicitly so the storage write doesn't rely on chopsticks
+# zero-defaulting missing fields. `flags` = 2^127 is the post-balances-v2
+# "new logic" bit; without it the runtime treats the account as legacy and
+# may apply old reserve-vs-frozen accounting on the deposit path.
+import-storage:
+  System:
+    Account:
+      - - - 5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
+        - nonce: 0
+          consumers: 0
+          providers: 1
+          sufficients: 0
+          data:
+            free: '1000000000000000000'
+            reserved: '0'
+            frozen: '0'
+            flags: '170141183460469231731687303715884105728'

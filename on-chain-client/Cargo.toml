@@ -1,0 +1,86 @@
+# Self-contained workspace declaration. The repo root has a workspace
+# Cargo.toml (Phase 1.d landed `org-members`, `spike-*` as members);
+# without this empty `[workspace]` cargo walks up to that root and
+# refuses to build us because we're not listed as a member. We're
+# intentionally outside that workspace — Phase 1.b ships as a separate
+# unit and this crate has different lint/edition settings.
+[workspace]
+
+[package]
+name = "on-chain-client"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-only"
+description = "Read-only client for the OrgRegistry contract deployed via pallet-revive on Asset Hub."
+
+[features]
+default = ["dev-rpc"]
+# `std` is an explicit feature so the client feature can opt into it.
+# Without `std`, the crate compiles as `no_std + alloc` — types, decoders
+# and verifier only.
+std = []
+# The subxt-based OrgRegistryClient. Transport-agnostic: callers hand in
+# an OnlineClient built on whatever backend fits (LegacyBackend for
+# chopsticks tests, ChainHeadBackend / light-client for production).
+client = ["std", "dep:futures-core", "dep:futures-util", "dep:subxt"]
+# Test/dev profile: client over subxt's jsonrpsee WS transport.
+dev-rpc = ["client"]
+# Production/PWA profile: client over subxt's embedded smoldot light
+# client (per the 2026-06-04 amendment, this replaced the hand-rolled
+# SmoldotRpc).
+smoldot = ["client", "subxt/light-client"]
+
+[dependencies]
+# SCALE decoder for pallet-revive event payloads. no_std + alloc compatible
+# by default — the decoder module compiles in every feature config.
+parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
+# Keccak-256 for Solidity event signatures + storage-slot derivation
+# (mapping(address => OrgState) keys are keccak(abi.encode(...))), and
+# for pallet-revive's AccountId32 → H160 mapping in `h160`.
+# Pure-Rust + no_std-compatible.
+tiny-keccak = { version = "2", default-features = false, features = ["keccak"] }
+futures-core = { version = "0.3", default-features = false, features = ["alloc"], optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
+
+# subxt powers the entire client: backend/transport, metadata-aware
+# storage + event access, runtime-API calls (ReviveApi::get_storage),
+# and (behind `smoldot`) the embedded light client.
+# NOTE (Task 12, investigated 2026-06-05): the wasm32-browser lane is
+# BLOCKED UPSTREAM and there is no clean fix within subxt 0.50.1.
+# The plan's target-split (a wasm32 `subxt = { features = ["web"] }` entry)
+# was tried: even when the wasm entry drops `jsonrpsee`/`native` and uses
+# only `web` + `light-client`, cargo's cross-target FEATURE UNIFICATION
+# re-enables `jsonrpsee` (turned on by the native lane that *does* need it),
+# so `subxt-rpcs/web`'s `jsonrpsee?/wasm-client` fires and demands
+# `jsonrpsee-wasm-client = ^0.24.11` — a sub-crate of jsonrpsee 0.24.11
+# (subxt 0.50.1's pinned jsonrpsee) that was NOT published to crates.io
+# (only 0.25.x / 0.26.x exist). subxt 0.50.1 is the newest published subxt;
+# there is no 0.51 with jsonrpsee 0.25+ yet. Fixes would require either a
+# subxt bump (when published) or a `[patch]` onto a git-sourced yanked
+# sub-crate — the latter is a hack the 2026-06-04 amendment explicitly says
+# to surface as a re-assess trigger, not work around. The NATIVE smoldot
+# lane (`--features smoldot`, the live smoke test) is unaffected and works.
+subxt = { version = "0.50", default-features = false, features = ["native", "jsonrpsee"], optional = true }
+
+[dev-dependencies]
+# Test-only deps. Integration tests are all `#![cfg(feature = "dev-rpc")]`
+# and run on native hosts only.
+jsonrpsee = { version = "0.26", default-features = false, features = ["ws-client", "http-client"] }
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "macros", "sync", "time", "process"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+subxt-signer = { version = "0.50", default-features = false, features = ["sr25519", "subxt"] }
+# blake2b-256 for pallet-multisig pseudo-account derivation in
+# tests/common/multisig.rs.
+blake2 = "0.10"
+# libc is used by the chopsticks_fork harness to put the chopsticks
+# subprocess in its own process group (setsid in pre_exec) and tear it
+# down with killpg in Drop — chopsticks forks a worker process and
+# SIGKILLing only the parent orphans the worker.
+libc = "0.2"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

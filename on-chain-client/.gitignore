@@ -1,0 +1,5 @@
+target/
+# chopsticks DB files spilled here when the fork harness's cwd
+# resolution falls back to relative paths; `on-chain/tmp/` is the
+# intended location.
+tmp/

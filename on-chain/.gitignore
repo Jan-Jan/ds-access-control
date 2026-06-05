@@ -1,0 +1,10 @@
+cache/
+out/
+broadcast/
+node_modules/
+.env
+.env.local
+*.log
+foundry.lock
+tmp/
+scripts/node_modules/

@@ -23,6 +23,10 @@ For crate-specific guidance, see the AGENTS.md inside each crate directory:
 - **Always work in a git worktree for feature work.** Use the worktree skill.
 - **Don't ask "should I commit?" repeatedly.** Just commit at natural points.
 - **Disable gpg signing for git commits in worktrees**, UNLESS when git merging the worktree into main branch (e.g. `master`) in which case squash the worktree commits and require the user signature for the merge.
+  How: `git config extensions.worktreeConfig true && git config --worktree commit.gpgsign false`
+  inside the worktree. Never write `commit.gpgsign` to the shared repo config
+  from a worktree. If the merge commit ends up unsigned (agent session),
+  re-sign with `git commit --amend -S` from a regular terminal.
 
 ## Lessons learned (don't repeat these)
 

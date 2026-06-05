@@ -551,6 +551,35 @@ If Stage 1's Foundry tests surface a needed contract change after Stage 2 has st
 - CI matrix: default `cargo test --features dev-rpc` (WS); `--features smoldot` for the smoke job.
 - Threshold-1 multisig handling: pallet-multisig dispatches threshold-1 via `as_multi_threshold_1` (a different extrinsic from `as_multi`). The test harness's `multisig_dispatch` helper picks the right call automatically; the pseudo-account derivation is unchanged. Verified during task 6 (harness implementation).
 
+### Resolved (Stage 2 — subxt-commitment, empirical findings)
+
+These resolve the Open Items above and the implementation-time unknowns from the
+two-stage plan. The transport commitment and its rationale live in the amendment
+[`2026-06-04-ods-phase-1b-stage2-subxt-commitment-design.md`](2026-06-04-ods-phase-1b-stage2-subxt-commitment-design.md);
+the chopsticks divergences are also recorded in the `reorg_cancels_proposed.rs`
+(Scenario C) doc-comment.
+
+- **Runtime pin.** Paseo Asset Hub, `spec_name = "asset-hub-paseo"`, `spec_version = 2_002_002`. Decoder dispatch (`decode::dispatch::for_runtime`) is version-gated; the live smoke test trips deliberately when the runtime upgrades, forcing an additive decoder PR rather than a silent decode break.
+- **Transport.** subxt 0.50.1 only — the hand-rolled `Rpc`/`WsRpc`/`SmoldotRpc` trait and impls were deleted. Backend choice lives at the call edge: explicit `LegacyBackend` for chopsticks tests (chopsticks' PARTIAL v2-RPC support silently breaks subxt's default `CombinedBackend`, so **never** use `from_url` against chopsticks); `CombinedBackend`-over-smoldot for the light client (its chainHead probe wins); `ChainHeadBackend` for live full nodes.
+- **State read.** Via the `ReviveApi::get_storage` runtime API, NOT a storage map. pallet-revive keeps contract slots in a per-contract child trie; there is no `Revive::ContractStorage` storage map in metadata. This supersedes §"Decoding pallet-revive storage and events"'s "direct storage read" sketch.
+- **pallet-revive account mapping.** A *fresh* pure proxy must dispatch `Revive.map_account` as itself before its first contract call (error 43 / pallet 100 otherwise). Plain dev accounts work unmapped via a pre-existing fallback mapping in fork state. Pinned by Scenario A.
+- **`subscribe` topology.** Two merged lanes (best + finalised). Best lane: gap-fill by block number (legacy `newHeads` skips blocks under back-to-back manual mining) + parent-hash reorg detection emitting `Reorged { discarded }`; dedup by head hash. Finalised lane: monotonic-by-number, no replay after rewinds — reorg detection is delegated entirely to the best lane's `Reorged`. The same event generally arrives on both lanes.
+- **Chopsticks divergences (Scenario C).** (a) chopsticks finalises every `dev_newBlock` — no GRANDPA semantics; (b) `dev_setHead` does NOT revert the storage DB — a depth-1 reorg discards block *identity* but NOT *state* (and the txpool isn't cleared, so re-application can also occur). The spec property "reorg cancels the proposed update's state" is therefore **delegated to live-chain verification**; Scenario C asserts the `Reorged` notification plus the chopsticks-true state outcome.
+- **Multisig — threshold-1 resolved; threshold>1 deliberately deferred.** Threshold-1 dispatches via `as_multi_threshold_1`; the pseudo-account derivation `blake2_256(scale((b"modlpy/utilisuba", sorted_signers, threshold_u16)))` is empirically pinned (fund-then-dispatch-from proof). The full threshold>1 `as_multi`/`approve_as_multi` ceremony remains **deliberately deferred** — not needed to prove the OrgId invariant or any Stage 2 property; pinning the derivation + threshold-1 dispatch covers the design's load-bearing claims.
+- **CI matrix.** Default `cargo test --features dev-rpc -- --test-threads=1` (chopsticks, serial on fixed port 8000); `--no-default-features --features smoldot --test smoldot_smoke -- --ignored` for the smoke job (needs internet, allowed-flaky). Full matrix in `on-chain-client/README.md`.
+- **wasm32 browser lane — BLOCKED UPSTREAM** in subxt 0.50.1: cross-target feature unification activates `subxt-rpcs/web`'s `jsonrpsee?/wasm-client`, which demands `jsonrpsee-wasm-client ^0.24.11`, unpublished on crates.io. Re-assess on the next subxt release. The *native* smoldot lane works — the smoke test PASSED live (`spec_version 2002002` confirmed, finalised block received, 18.5 s).
+- **OrgId invariant.** `h160_of(P) == ` the runtime event's `admin`, stable across multisig rotation — pinned with no circularity (P from the `PureCreated` event; the prediction from our own keccak code; the admin from the runtime's own mapping). `p_address_is_orgid.rs`.
+- **`get_org_state(admin, None)` block resolution.** Reads at the latest FINALISED head (`at_current_block` → `latest_finalized_block_ref` under the legacy backend); all three slots resolve at a single block (no torn reads).
+
+### Resolved during Stage 1 (chopsticks-Paseo deployment empirical findings)
+
+- **pallet-revive's `PristineCode` storage is keyed by keccak-256 of the raw blob, NOT blake2-256.** Stage 2's storage-key derivation and any local-hash comparisons must use keccak-256. Confirmed empirically against a chopsticks-forked Paseo Asset Hub at runtime version observed at implementation time.
+- **`pallet-revive::instantiateWithCode` extrinsic argument order** (live Paseo metadata): `(value, weightLimit, storageDepositLimit, code, data, salt)`. `storageDepositLimit` is `Compact<u128>`, not `Option`.
+- **resolc v1.1.0 output filename** is `<source>:<Contract>.pvm` (source-file prefixed), not `<Contract>.polkavm`. Installed via pre-built binary from the paritytech/revive GitHub releases page; no `cargo install` path was available at the time.
+- **Paseo Asset Hub WSS endpoint used:** `wss://asset-hub-paseo-rpc.n.dwellir.com` (Dwellir public node).
+- **Weight limit cap:** `refTime: 1_000_000_000_000` is well within Paseo AH's per-extrinsic block limit (~1.6e12). 5e12 (the initial guess) is rejected as `ExhaustsResources`.
+- **Byte extraction for hash round-tripping:** `pristine.toU8a(true)` strips the SCALE compact-length prefix to give raw blob bytes; `pristine.toHex()` includes the prefix and must not be used for re-hashing.
+
 ## What this phase explicitly does not deliver
 
 - Submission helpers (admins use polkadot.js / `subxt` directly until Phase 2).
