@@ -12,6 +12,23 @@ jobs:
       - run: quint typecheck quint/membership_mbt.qnt
       - run: quint test quint/membership.qnt
       - run: quint run quint/membership_mbt.qnt --invariant=mbtInv --max-steps=15 --max-samples=200
+      - run: quint typecheck quint/protocol.qnt
+      - run: quint typecheck quint/ods_instances.qnt
+      - run: quint run quint/protocol.qnt --invariant=forkSafety --max-steps=16 --max-samples=5000
+      - run: quint run quint/protocol.qnt --invariant=revocationSafety --max-steps=16 --max-samples=5000
+      - run: quint run quint/protocol.qnt --invariant=revokedExcludedFromOrgSecret --max-steps=16 --max-samples=5000
+  apalache:
+    runs-on: ubuntu-latest
+    continue-on-error: true   # bounded verify is best-effort (slow, JVM-heavy)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - uses: actions/setup-java@v4
+        with: { distribution: "temurin", java-version: "17" }
+      - run: npm i -g @informalsystems/quint
+      - run: quint verify quint/protocol.qnt --invariant=forkSafety --max-steps=8
+      - run: quint verify quint/protocol.qnt --invariant=revocationSafety --max-steps=8
   mbt:
     runs-on: ubuntu-latest
     steps:

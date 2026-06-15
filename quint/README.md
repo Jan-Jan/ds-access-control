@@ -48,3 +48,38 @@ defaults.)
 - Confusables are modeled via an explicit `skeleton` field, not real UTS#39.
 - Protocol-layer properties (revocation/replay/τ-window/convergence) and the
   full adversary arrive in Milestone 2 (`protocol.qnt`).
+
+## Protocol layer (Milestone 2)
+
+`protocol.qnt` is the distributed state machine over `membership`: on-chain anchor
+(`chain`), per-member belief (`local`), an unordered tagged-envelope `network`,
+abstract knowledge sets (`orgKnows`, `tokenKnows`/`objToken`), and revocation /
+accepted-write bookkeeping. `ods_instances.qnt` holds vacuity-witness invariants.
+
+Adversaries: network (drop/duplicate), revoked-insider (replay, stale write),
+below-threshold rogue admin (off-chain delta).
+
+Properties (checked with the simulator):
+
+- `forkSafety` — honest members at the same epoch hold the same root.
+- `revocationSafety` — once an object is settled (current members caught up AND
+  its CGKA token was rotated at/after the current epoch), no revoked principal
+  holds its token and every accepted current-epoch write is by a current member.
+  The epoch-stamped "settled" precondition deliberately excludes the pre-rekey
+  transitive-trust window (that is the Milestone-3 τ-window, not a violation).
+
+Commands (append `--backend=typescript` locally; CI uses defaults):
+
+- `quint run quint/protocol.qnt --invariant=forkSafety --max-steps=16 --max-samples=5000`
+- `quint run quint/protocol.qnt --invariant=revocationSafety --max-steps=16 --max-samples=5000`
+- vacuity witnesses: `quint run quint/ods_instances.qnt --invariant=settledWithRevocationReachable ...` (finds a counterexample = the target state is reachable).
+
+Negative controls (documented, not committed): dropping the `== chain.root` gate
+in `memberFetchAndApply` breaks `forkSafety`; leaking a CGKA token to revoked
+members in `cgkaRotate` breaks `revocationSafety`. Both produce simulator
+counterexamples.
+
+**Apalache `quint verify`** runs only in CI (the `apalache` job): it needs a JVM
+and a writable `~/.quint`, neither available in the dev sandbox. Locally, the
+`quint run --invariant` simulator is the property checker. Convergence and the
+τ-window property arrive in Milestone 3.
