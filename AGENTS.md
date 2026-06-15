@@ -27,6 +27,7 @@ For crate-specific guidance, see the AGENTS.md inside each crate directory:
   inside the worktree. Never write `commit.gpgsign` to the shared repo config
   from a worktree. If the merge commit ends up unsigned (agent session),
   re-sign with `git commit --amend -S` from a regular terminal.
+- **Always include fuzz testing.**
 
 ## Lessons learned (don't repeat these)
 
