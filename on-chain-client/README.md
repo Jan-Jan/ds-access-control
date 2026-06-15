@@ -156,6 +156,39 @@ The clippy gate applies to lib code only (`--lib`); test code may use
 allowed-flaky (it also trips deliberately if the live AH runtime upgrades
 past the pinned `spec_version 2_002_002`).
 
+## Fuzzing
+
+The untrusted-byte decoders are fuzzed with [bolero](https://crates.io/crates/bolero).
+Three targets live under `tests/<target>/fuzz_target.rs`:
+
+| Target | Checks |
+| --- | --- |
+| `fuzz_parse_revive_event` | `parse_revive_event` never panics on arbitrary bytes |
+| `fuzz_decode_org_state` | `decode_org_state` never panics on arbitrary bytes |
+| `fuzz_event_round_trip` | `parse_revive_event` is the exact inverse of the on-chain encoding (structured inputs) |
+
+**Default lane (stable, CI):** the targets are `harness = false` binaries, so a
+plain `cargo test` runs each one — replaying its committed `corpus/` seeds plus
+a bounded batch of generated inputs. No nightly toolchain required. Run one
+target directly with `cargo test --test fuzz_parse_revive_event`.
+
+**Deep fuzzing (nightly, on demand):**
+
+```bash
+cargo install cargo-bolero
+cargo bolero test fuzz_parse_revive_event --engine libfuzzer   # coverage-guided
+```
+
+Any crash is written to the target's `crashes/` dir; commit it there as a
+permanent regression seed.
+
+**Corpus seeds** for the two byte targets are produced by an `#[ignore]`d
+regenerator — rebuild them after a contract ABI change with:
+
+```bash
+cargo test --test regenerate_corpus -- --ignored
+```
+
 ## See also
 
 - [`../on-chain/README.md`](../on-chain/README.md) — Solidity contract,

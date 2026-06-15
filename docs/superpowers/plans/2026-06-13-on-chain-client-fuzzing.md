@@ -182,17 +182,24 @@ Create `on-chain-client/tests/fuzz_parse_revive_event/fuzz_target.rs`:
 //! `cargo test --test fuzz_parse_revive_event`; deep-fuzz with
 //! `cargo bolero test fuzz_parse_revive_event --engine libfuzzer`.
 
+use std::panic::AssertUnwindSafe;
+
 use bolero::check;
-// `Decoder` trait must be in scope to call `parse_revive_event` on the
-// `&dyn Decoder` from `for_runtime`.
-use on_chain_client::decode::Decoder;
 use on_chain_client::decode::dispatch::{PASEO_AH_SPEC_VERSION, for_runtime};
 
 fn main() {
     let decoder = for_runtime(PASEO_AH_SPEC_VERSION)
         .expect("pinned Paseo AH decoder must resolve");
-    check!().for_each(|input: &[u8]| {
-        let _ = decoder.parse_revive_event(input);
+    // bolero wraps each iteration in `catch_unwind`, which needs the closure's
+    // captures to be `RefUnwindSafe`. `&dyn Decoder` is not, but every impl is
+    // a stateless unit struct, so an unwind can't leave it inconsistent —
+    // assert it. Deref the wrapper inside the closure (not its `.0` field) so
+    // the closure captures the `AssertUnwindSafe` wrapper itself.
+    // (`parse_revive_event` needs no `use Decoder`: the receiver is the
+    // `dyn Decoder` trait object, which already names the trait.)
+    let decoder = AssertUnwindSafe(decoder);
+    check!().for_each(move |input: &[u8]| {
+        let _ = (*decoder).parse_revive_event(input);
     });
 }
 ```
@@ -352,10 +359,9 @@ Create `on-chain-client/tests/fuzz_event_round_trip/fuzz_target.rs`:
 //! `cargo test --test fuzz_event_round_trip`; deep-fuzz with
 //! `cargo bolero test fuzz_event_round_trip --engine libfuzzer`.
 
+use std::panic::AssertUnwindSafe;
+
 use bolero::{TypeGenerator, check};
-// `Decoder` trait in scope so `parse_revive_event` is callable on the
-// `&dyn Decoder` returned by `for_runtime`.
-use on_chain_client::decode::Decoder;
 use on_chain_client::decode::dispatch::{PASEO_AH_SPEC_VERSION, for_runtime};
 use on_chain_client::{Epoch, Event, OnChainRootHash, OrgAdmin, OrgPubKey};
 
@@ -423,12 +429,16 @@ fn encode_and_expect(shape: &EventShape) -> (Vec<u8>, Event) {
 fn main() {
     let decoder = for_runtime(PASEO_AH_SPEC_VERSION)
         .expect("pinned Paseo AH decoder must resolve");
+    // AssertUnwindSafe for bolero's per-iteration catch_unwind (decoders are
+    // stateless unit structs); deref inside the closure so the wrapper itself
+    // is captured. The `dyn Decoder` receiver makes `use Decoder` unnecessary.
+    let decoder = AssertUnwindSafe(decoder);
     check!()
         .with_type::<EventShape>()
         .cloned()
-        .for_each(|shape: EventShape| {
+        .for_each(move |shape: EventShape| {
             let (bytes, expected) = encode_and_expect(&shape);
-            let decoded = decoder
+            let decoded = (*decoder)
                 .parse_revive_event(&bytes)
                 .expect("valid ContractEmitted payload must decode without error");
             assert_eq!(

@@ -79,8 +79,31 @@ blake2 = "0.10"
 # down with killpg in Drop — chopsticks forks a worker process and
 # SIGKILLing only the parent orphans the worker.
 libc = "0.2"
+# Fuzzing: bolero runs targets on stable via `cargo test` (corpus replay +
+# bounded generated inputs) and drives libFuzzer/AFL under `cargo-bolero` on
+# nightly. parity-scale-codec / tiny-keccak are already library deps but
+# integration-test crates can't see the library's normal deps, so they're
+# re-declared dev-side for the round-trip target + corpus regenerator.
+bolero = "0.13"
+parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
+tiny-keccak = { version = "2", default-features = false, features = ["keccak"] }
 
 [lints.clippy]
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
+
+[[test]]
+name = "fuzz_decode_org_state"
+path = "tests/fuzz_decode_org_state/fuzz_target.rs"
+harness = false
+
+[[test]]
+name = "fuzz_parse_revive_event"
+path = "tests/fuzz_parse_revive_event/fuzz_target.rs"
+harness = false
+
+[[test]]
+name = "fuzz_event_round_trip"
+path = "tests/fuzz_event_round_trip/fuzz_target.rs"
+harness = false
