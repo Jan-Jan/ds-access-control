@@ -40,7 +40,11 @@ Targets are reached only via the public `for_runtime` path — never the
 
 ## Targets
 
-Three bolero targets in one integration-test file `tests/fuzz_decoders.rs`:
+Three bolero targets. bolero keys a target's committed corpus/regression files
+to a dedicated test **binary** (`harness = false`), so each target is its own
+directory `tests/<target>/fuzz_target.rs` with sibling `corpus/` and `crashes/`
+dirs and a `[[test]]` entry in `Cargo.toml`. Each `fuzz_target.rs` is a small
+`fn main()` that calls `bolero::check!()`. The three targets:
 
 ### 1. `fuzz_parse_revive_event` — raw bytes, never-panic
 
@@ -58,8 +62,8 @@ bytes, and the slot copies.
 
 ### 3. `fuzz_event_round_trip` — structured, inverse property
 
-Input: an `Arbitrary`-derived `EventShape` enum that can only describe a
-*structurally valid* event:
+Input: a `bolero::TypeGenerator`-derived `EventShape` enum that can only
+describe a *structurally valid* event:
 
 ```text
 enum EventShape {
@@ -85,24 +89,65 @@ genuine cross-check rather than a tautology.
 
 ## Structure & dependencies
 
-- New file: `on-chain-client/tests/fuzz_decoders.rs`. An integration test, so it
-  is **outside** the `--lib` clippy gate (`README.md:154`) and may panic/`unwrap`
-  freely — which is how bolero signals a failure.
+Layout (one directory per target, bolero's canonical form):
+
+```
+on-chain-client/
+  Cargo.toml                       # +3 [[test]] entries, +1 dev-dep
+  tests/
+    fuzz_parse_revive_event/
+      fuzz_target.rs               # fn main { check!().for_each(|b: &[u8]| ...) }
+      corpus/                      # committed seed inputs
+      crashes/.gitkeep             # regression seeds land here
+    fuzz_decode_org_state/
+      fuzz_target.rs
+      corpus/
+      crashes/.gitkeep
+    fuzz_event_round_trip/
+      fuzz_target.rs               # EventShape + encoder + decode + assert
+      corpus/.gitkeep
+      crashes/.gitkeep
+```
+
+- Each `fuzz_target.rs` is a `harness = false` test binary, so it is **outside**
+  the `--lib` clippy gate (`README.md:154`) and may panic/`unwrap` freely —
+  which is how bolero signals a failure. Plain `cargo test` runs each binary's
+  `main()` (corpus replay + a bounded batch of generated inputs); a panic →
+  non-zero exit → failed test.
 - New `[dev-dependencies]`:
-  - `bolero = "0.13"` — runs targets in libtest mode on stable, and (with
-    `cargo-bolero` on nightly) drives libFuzzer/AFL for coverage-guided runs.
-  - `arbitrary = { version = "1", features = ["derive"] }` — derives the
-    `EventShape` generator for the round-trip target.
+  - `bolero = "0.13"` — ships its own `TypeGenerator` derive (re-exported), so
+    the structured round-trip target needs no separate `arbitrary` crate. Runs
+    on stable for the default lane; drives libFuzzer/AFL under `cargo-bolero` on
+    nightly.
+  - `parity-scale-codec = { version = "3", default-features = false, features =
+    ["derive"] }` — already a library dependency, but integration-test crates
+    can't see the library's *normal* deps, so the round-trip encoder and the
+    corpus regenerator need it declared dev-side too. Test-only; does not change
+    the library's runtime dependency set.
+  - `tiny-keccak = { version = "2", default-features = false, features =
+    ["keccak"] }` — same dev-side re-declaration. The round-trip target and the
+    regenerator derive the two event-signature topic hashes from their canonical
+    Solidity signature strings (`keccak256("GenesisInitialized(...)")`), rather
+    than hardcoding the decoder's `pub(super)` constants — an independent
+    derivation that also guards against ABI drift.
+- New `[[test]]` entries (one per target), e.g.:
+
+  ```toml
+  [[test]]
+  name = "fuzz_parse_revive_event"
+  path = "tests/fuzz_parse_revive_event/fuzz_target.rs"
+  harness = false
+  ```
+
 - No change to the library crate's dependency set or feature flags. The decoders
-  compile in every feature config (`no_std + alloc`); the test file pulls in no
+  compile in every feature config (`no_std + alloc`); the targets pull in no
   subxt/client machinery.
 
 ## Corpus seeding
 
-bolero auto-discovers `tests/corpus/<target>/` (seed inputs) and
-`tests/crashes/<target>/` (regression inputs). We commit seed files for the two
-raw-byte targets, generated from the existing unit-test fixtures so the default
-run starts from structure-valid bytes and mutates outward:
+bolero reads seed inputs from each target's `corpus/` dir and regression inputs
+from its `crashes/` dir. For the two raw-byte targets we commit seed files so the
+default run starts from structure-valid bytes and mutates outward:
 
 - `fuzz_parse_revive_event`: a valid `GenesisInitialized` payload, a valid
   `RootUpdated` payload, an empty-topics (`log0`) payload, a wrong-topic-count
@@ -110,23 +155,30 @@ run starts from structure-valid bytes and mutates outward:
 - `fuzz_decode_org_state`: a valid 96-byte blob (epoch = 7), a `u64::MAX`-epoch
   blob, an epoch-overflow blob, a 95-byte (wrong-length) blob.
 
-A small committed `tests/corpus/README.md` records how the seeds were produced
-(so they can be regenerated if the fixtures change). `tests/crashes/` starts
-empty; any crash found in a deep run is committed there as a permanent
+Corpus files for these two targets are raw decoder-input bytes, so they are
+produced by a committed, `#[ignore]`d regenerator test
+(`tests/regenerate_corpus.rs`) that encodes the fixtures and writes the files —
+executable documentation of how each seed was produced and a one-command way to
+rebuild them if the contract ABI changes (`cargo test --test regenerate_corpus
+-- --ignored`). The round-trip target's input is the generator's raw driver
+bytes (not a serialised `EventShape`), so it ships with an empty `corpus/`
+(`.gitkeep`) and relies on generated inputs. Every `crashes/` dir starts empty
+(`.gitkeep`); any crash found in a deep run is committed there as a permanent
 regression seed.
 
 ## Run story
 
-- **Default / CI** — `cargo test --test fuzz_decoders` runs all three targets in
-  bolero's **libtest mode** on **stable Rust**: it replays the committed corpus
-  plus a deterministic batch of generated inputs on every run, with no nightly
-  toolchain and no extra CI wiring. It rides the existing `cargo test` invocation
-  — this is the always-on regression gate that satisfies the AGENTS.md rule.
+- **Default / CI** — a bare `cargo test` builds and runs all three
+  `harness = false` target binaries on **stable Rust**: each replays its
+  committed corpus plus a bounded batch of generated inputs, with no nightly
+  toolchain and no extra CI wiring. (A single target can also be run directly:
+  `cargo test --test fuzz_parse_revive_event`.) This is the always-on regression
+  gate that satisfies the AGENTS.md rule.
 - **Deep fuzzing (on demand)** — coverage-guided multi-hour runs use
   `cargo install cargo-bolero` then
   `cargo bolero test fuzz_parse_revive_event --engine libfuzzer` (nightly).
-  New crashes land in `tests/crashes/<target>/` and become regression seeds for
-  the default lane.
+  New crashes land in that target's `crashes/` dir and become regression seeds
+  for the default lane.
 
 ## Documentation
 
@@ -136,7 +188,8 @@ regression seed.
 
 ## Testing & acceptance
 
-- `cargo test --test fuzz_decoders` passes (all three targets, libtest mode).
+- `cargo test` runs and passes all three target binaries (and each is runnable
+  individually via `cargo test --test <target>`).
 - The existing suite stays green: `cargo test` (default features) and the
   `--lib` clippy deny-gate (`-D clippy::unwrap_used -D clippy::expect_used
   -D clippy::panic`) — the new dev-deps and test file must not regress either.
