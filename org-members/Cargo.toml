@@ -36,3 +36,7 @@ proptest = "1"
 # Self-reference enables `test-helpers` only when building tests, not in
 # downstream production builds.
 org-members = { path = ".", features = ["test-helpers"] }
+quint-connect = "0.1"
+anyhow = "1"
+hex = "0.4"
+serde_json = "1"

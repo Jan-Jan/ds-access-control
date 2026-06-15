@@ -1,0 +1,7 @@
+# Generated ITF traces
+*.itf.json
+traces/
+# Apalache working files
+.apalache/
+_apalache-out/
+x/

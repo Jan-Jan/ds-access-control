@@ -8,6 +8,11 @@
 
 **Tech Stack:** Quint (Bluespec-family spec language, Apalache/simulator backend), `quint` CLI; Rust with `quint-connect = "0.1"`, `serde`, `itf`; the existing `org-members` crate (`OrgTrie`, `MemberLeaf`, `Blake3Hasher`).
 
+> **Execution environment (this sandbox).** `$HOME` and `~/.cargo` are mounted read-only here (vibebox), which breaks two default tool behaviours. Apply these substitutions when running commands locally; **CI runs in a normal environment and uses the defaults** (the `.github/workflows/quint.yml` in Task 12 is unchanged):
+> - **Quint:** append `--backend=typescript` to every `quint test` and `quint run` command. The default `rust` backend downloads an evaluator into `~/.quint`, which fails on the read-only home. `quint typecheck` needs no flag. Test discovery requires the `run` name to **end in `Test`** (confirmed).
+> - **Cargo:** prefix cargo invocations with `CARGO_HOME=/tmp/cargo-wt` and run them with the sandbox disabled, since `~/.cargo` is read-only. For the MBT test (Tasks 10–11) which shells out to `quint` internally, also set `HOME=/tmp/fakehome` for that single `cargo test` invocation so quint-connect's evaluator download has a writable home; do **not** export `HOME` for `git` commands (it would lose identity/signing config).
+> - **Quint map key removal:** there is no `mapRemove`/`mapRemoveAll` builtin in quint 0.32. Remove a key by rebuilding: `s.keys().exclude(Set(id)).mapBy(k => s.get(k))`. The plan's code blocks below use this idiom.
+>
 > **Refinement of the spec:** The design spec (`docs/superpowers/specs/2026-06-15-quint-protocol-model-design.md`) lists the MBT trace source as `membership.qnt`. quint-connect requires the trace-generating `step` to contain only *named* actions and a state machine (`var` + `init` + `step`), whereas the protocol layer must import `membership.qnt`'s pure defs *without* inheriting membership state. To satisfy both, this plan splits the runnable MBT state machine into a separate `membership_mbt.qnt` that imports the pure `membership.qnt`. Trace generation runs against `membership_mbt.qnt`. This is a structural refinement only; the semantics are unchanged.
 
 ---
@@ -276,7 +281,7 @@ Expected: FAIL — the new ops are undefined.
     if (not(s.keys().contains(id)))
       Err("IdNotFound")
     else
-      Ok(s.mapRemove(id))
+      Ok(s.keys().exclude(Set(id)).mapBy(k => s.get(k)))
 
   /// True iff `skel` collides with any member OTHER than `selfId`.
   pure def skeletonTakenByOther(s: Snapshot, selfId: str, skel: str): bool =
@@ -502,7 +507,7 @@ Expected: FAIL — `calculateDelta` / `applyDelta` undefined.
       Err("NoOpUpsert")
     else
       // apply: drop removed, then put each upsert
-      val afterRemove = d.removed.fold(s, (acc, id) => acc.mapRemove(id))
+      val afterRemove = s.keys().exclude(d.removed).mapBy(k => s.get(k))
       val afterUpsert = d.upserted.fold(afterRemove, (acc, l) => acc.put(l.id, l))
       // post-checks
       if (afterUpsert.keys().exists(k =>
