@@ -79,12 +79,16 @@ in `memberFetchAndApply` breaks `forkSafety`; leaking a CGKA token to revoked
 members in `cgkaRotate` breaks `revocationSafety`. Both produce simulator
 counterexamples.
 
-**Apalache `quint verify`** runs only in CI (the `apalache` job): it needs a JVM
-and a writable `~/.quint`, neither available in the dev sandbox. All three
-invariants verify cleanly at `--max-steps=2` (~10s each), which is what CI runs.
-Depth is capped at 2 because the protocol state carries full trie `Snapshot` maps
-in `chain`/`local`/every network envelope, so Apalache's symbolic encoding
-explodes past 2 steps (depth 3+ does not terminate). The `quint run --invariant`
-simulator covers greater depth (thousands of samples); deeper Apalache
-verification needs the abstract-root remodel noted in the design spec's Phasing
-section. Convergence and the τ-window property arrive in Milestone 3.
+**Apalache `quint verify`** runs in CI (the `apalache` job) and locally with a JVM.
+`protocol.qnt` uses an **abstract-root representation** — roots are opaque `int`
+tokens with a `rootMembers: int -> Set[str]` side-table, not full trie `Snapshot`
+maps (the rich Snapshot/Leaf semantics live in `membership.qnt`, validated by the
+simulator + MBT). This keeps the protocol state small enough for Apalache to verify
+`forkSafety`/`revocationSafety`/`revokedExcludedFromOrgSecret` to depth ~5-6 (the
+concrete-Snapshot model topped out at depth 2). The simulator (`quint run
+--invariant`) still covers greater breadth. Roots are fresh monotonic ids, faithful
+while membership only shrinks (removals) — revisit if a later milestone adds member
+re-addition. Convergence and the τ-window property arrive in Milestone 3.
+
+Local Apalache run (outside CI) needs a JVM and a writable `$HOME`:
+`HOME=/tmp/fakehome JAVA_HOME=$(/usr/libexec/java_home) PATH=$JAVA_HOME/bin:$PATH quint verify quint/protocol.qnt --invariant=forkSafety --max-steps=5`.

@@ -1,23 +1,24 @@
 // -*- mode: Bluespec; -*-
-/// Distributed ODS Phase 1 protocol state machine (Milestone 2: protocol safety).
-/// Imports the pure membership core; models the on-chain anchor, per-member
-/// local belief, an unordered tagged-envelope network, abstract knowledge sets
-/// for the org secret and per-data-object CGKA tokens, and revocation /
-/// accepted-write bookkeeping. Properties: revocation safety, replay/fork safety.
+/// Distributed ODS Phase 1 protocol state machine (Milestone 2: protocol safety),
+/// abstract-root representation: roots are opaque int tokens with a `rootMembers`
+/// side-table, so Apalache `quint verify` is tractable at depth. The rich
+/// Snapshot/Leaf/applyDelta semantics live in membership.qnt (simulator + MBT).
+///
+/// Faithfulness assumption (see spec): fresh monotonic root ids are faithful while
+/// membership only ever SHRINKS (removals), so no two reachable roots share a
+/// member-set. Revisit this if a future milestone adds member re-addition.
 module protocol {
   import membership.* from "./membership"
 
   type Principal = str
-
-  type ChainState = { epoch: int, root: Snapshot, orgGen: int }
-  type LocalView  = { epoch: int, root: Snapshot, orgGen: int }
+  type ChainState = { epoch: int, root: int, orgGen: int }
+  type LocalView  = { epoch: int, root: int, orgGen: int }
 
   type Envelope =
     | OnChainUpdate(ChainState)
-    | DeltaMsg(Delta)
+    | DeltaMsg({ base: int, result: int })
     | OrgSecretMsg({ gen: int, epoch: int })
     | WriteOp({ obj: str, author: Key, epoch: int })
-
   type TaggedEnv = { tag: int, env: Envelope }
 
   // ---- concrete small instance ----
@@ -27,39 +28,29 @@ module protocol {
   pure val OBJECTS: Set[str] = Set("o1")
   pure val ORG: str = "org"
 
-  // a device key for member m at generation g; member key for m at gen g.
-  // Quint strings have no concatenation, so device keys are distinguished from
-  // member keys by a separate generation range (1000+) rather than an owner
-  // suffix. Devices are not separate principals in Milestone 2, so this only
-  // needs to be structurally distinct from the member key.
   pure def memberKey(m: str, g: int): Key = { owner: m, gen: g }
-  pure def deviceKey(m: str, g: int): Key = { owner: m, gen: 1000 + g }
-
-  // a genesis leaf for member m (1 device, gen 0), skeleton == handle == m
-  pure def genesisLeaf(m: str): Leaf = {
-    id: m, handle: m, skeleton: m, name: "n", surname: "s",
-    pKey: memberKey(m, 0), devices: Set(deviceKey(m, 0)),
-  }
-
-  pure val genesisSnap: Snapshot = MEMBERS.fold(Map(), (acc, m) => acc.put(m, genesisLeaf(m)))
 
   // ---- state ----
   var chain: ChainState
   var local: str -> LocalView
   var network: Set[TaggedEnv]
-  var orgKnows: int -> Set[Principal]   // org key generation -> principals holding that secret
-  var objToken: str -> { id: int, epoch: int }  // data object -> current CGKA token (id + epoch minted)
-  var tokenKnows: int -> Set[Principal] // CGKA token id -> principals holding it
-  var revoked: Set[Principal]           // members removed from the trie at some point
+  var rootMembers: int -> Set[str]      // root id -> member set
+  var nextRoot: int                     // fresh-id counter for root tokens
+  var orgKnows: int -> Set[Principal]   // org-key gen -> holders
+  var objToken: str -> { id: int, epoch: int }  // object -> current CGKA token
+  var tokenKnows: int -> Set[Principal] // CGKA token id -> holders
+  var revoked: Set[Principal]
   var acceptedWrites: Set[{ obj: str, author: Key, epoch: int }]
   var nextTag: int
 
-  pure val initView: LocalView = { epoch: 0, root: genesisSnap, orgGen: 0 }
+  pure val initView: LocalView = { epoch: 0, root: 0, orgGen: 0 }
 
   action init = all {
-    chain' = { epoch: 0, root: genesisSnap, orgGen: 0 },
+    chain' = { epoch: 0, root: 0, orgGen: 0 },
     local' = MEMBERS.mapBy(_ => initView),
     network' = Set(),
+    rootMembers' = Map(0 -> MEMBERS),
+    nextRoot' = 1,
     orgKnows' = Map(0 -> MEMBERS),
     objToken' = OBJECTS.mapBy(_ => { id: 0, epoch: 0 }),
     tokenKnows' = Map(0 -> MEMBERS),
@@ -69,30 +60,25 @@ module protocol {
   }
 
   // ---- helpers ----
-  pure def currentMembers(s: Snapshot): Set[str] = s.keys()
+  pure def membersOf(rm: int -> Set[str], r: int): Set[str] = rm.get(r)
   val honestMembers: Set[str] = MEMBERS
-
   pure def getOrEmpty(mp: int -> Set[Principal], k: int): Set[Principal] =
     if (mp.keys().contains(k)) mp.get(k) else Set()
 
-  // True iff `s2` is a legal next trie reachable from `s` by one honest removal
-  // of a current member (the only membership change M2 needs to exercise).
-  pure def removeOne(s: Snapshot, m: str): Snapshot =
-    s.keys().exclude(Set(m)).mapBy(k => s.get(k))
-
-  // ADMIN: propose removing member `victim`. Bumps epoch + org gen, posts the
-  // on-chain update, and seeds the delta + org-secret envelopes into the network.
+  // ADMIN: propose removing `victim`. Mints a fresh root id, records its member
+  // set, advances the chain, and seeds on-chain update + delta + org secret.
   action adminProposeRemoval = {
-    nondet victim = chain.root.keys().oneOf()
-    val newRoot = removeOne(chain.root, victim)
-    val d = calculateDelta(chain.root, newRoot)
-    val newChain = { epoch: chain.epoch + 1, root: newRoot, orgGen: chain.orgGen + 1 }
+    nondet victim = membersOf(rootMembers, chain.root).oneOf()
+    val nr = nextRoot
+    val newChain = { epoch: chain.epoch + 1, root: nr, orgGen: chain.orgGen + 1 }
     all {
-      chain.root.keys().size() > 1,            // never empty the org
+      membersOf(rootMembers, chain.root).size() > 1,
+      rootMembers' = rootMembers.put(nr, membersOf(rootMembers, chain.root).exclude(Set(victim))),
+      nextRoot' = nr + 1,
       chain' = newChain,
       network' = network
         .union(Set({ tag: nextTag,     env: OnChainUpdate(newChain) }))
-        .union(Set({ tag: nextTag + 1, env: DeltaMsg(d) }))
+        .union(Set({ tag: nextTag + 1, env: DeltaMsg({ base: chain.root, result: nr }) }))
         .union(Set({ tag: nextTag + 2, env: OrgSecretMsg({ gen: chain.orgGen + 1, epoch: chain.epoch + 1 }) })),
       nextTag' = nextTag + 3,
       revoked' = revoked.union(Set(victim)),
@@ -101,44 +87,35 @@ module protocol {
     }
   }
 
-  // MEMBER: fetch a DeltaMsg whose base matches my local root, apply+verify
-  // against the chain root (mirrors apply_delta(...).verify_against(...)).
+  // MEMBER: fetch a DeltaMsg whose base matches my local root id, and adopt its
+  // result iff it equals the chain root id (the on-chain anchor check).
   action memberFetchAndApply = {
     nondet m = honestMembers.oneOf()
     nondet te = network.oneOf()
     all {
       network.size() > 0,
-      currentMembers(chain.root).contains(m),  // only current members act
-      match te.env {
-        | DeltaMsg(d) => d.baseRoot == local.get(m).root
-        | _ => false
-      },
-      match te.env {
+      membersOf(rootMembers, chain.root).contains(m),
+      local' = match te.env {
         | DeltaMsg(d) =>
-          match applyDelta(local.get(m).root, d) {
-            | Ok(s2) =>
-              if (s2 == chain.root)
-                local' = local.put(m, { epoch: chain.epoch, root: s2, orgGen: local.get(m).orgGen })
-              else local' = local
-            | Err(_) => local' = local
-          }
-        | _ => local' = local
+          if (d.base == local.get(m).root and d.result == chain.root)
+            local.put(m, { epoch: chain.epoch, root: d.result, orgGen: local.get(m).orgGen })
+          else local
+        | _ => local
       },
       chain' = chain, network' = network, orgKnows' = orgKnows,
       objToken' = objToken, tokenKnows' = tokenKnows, revoked' = revoked,
       acceptedWrites' = acceptedWrites, nextTag' = nextTag,
+      rootMembers' = rootMembers, nextRoot' = nextRoot,
     }
   }
 
-  // MEMBER: receive an OrgSecretMsg. Only a current member (per chain root) is
-  // added to the holders of that org-key generation. Revoked principals are
-  // structurally excluded.
+  // MEMBER: receive an OrgSecretMsg; only a current member is added to holders.
   action memberReceiveOrgSecret = {
     nondet m = honestMembers.oneOf()
     nondet te = network.oneOf()
     all {
       network.size() > 0,
-      currentMembers(chain.root).contains(m),
+      membersOf(rootMembers, chain.root).contains(m),
       orgKnows' = match te.env {
         | OrgSecretMsg(s) => orgKnows.put(s.gen, getOrEmpty(orgKnows, s.gen).union(Set(m)))
         | _ => orgKnows
@@ -146,36 +123,38 @@ module protocol {
       chain' = chain, local' = local, network' = network, objToken' = objToken,
       tokenKnows' = tokenKnows, revoked' = revoked,
       acceptedWrites' = acceptedWrites, nextTag' = nextTag,
+      rootMembers' = rootMembers, nextRoot' = nextRoot,
     }
   }
 
-  // CGKA: rotate object `obj`'s token to a fresh id (use nextTag as a unique id
-  // source), held by exactly the current members. Models post-revocation rekey.
+  // CGKA: rotate object token to a fresh id held by current members, stamped with
+  // the current epoch.
   action cgkaRotate = {
     nondet obj = OBJECTS.oneOf()
     all {
       objToken' = objToken.put(obj, { id: nextTag, epoch: chain.epoch }),
-      tokenKnows' = tokenKnows.put(nextTag, currentMembers(chain.root)),
+      tokenKnows' = tokenKnows.put(nextTag, membersOf(rootMembers, chain.root)),
       nextTag' = nextTag + 1,
       chain' = chain, local' = local, network' = network, orgKnows' = orgKnows,
       revoked' = revoked, acceptedWrites' = acceptedWrites,
+      rootMembers' = rootMembers, nextRoot' = nextRoot,
     }
   }
 
-  // WRITE: a current member emits a WriteOp on `obj`; it is accepted iff the
-  // author is a current member (write-acceptance falls back to the trie).
+  // WRITE: a current member's write is accepted (authorship gated on membership).
   action dataObjectWrite = {
     nondet m = honestMembers.oneOf()
     nondet obj = OBJECTS.oneOf()
     all {
-      currentMembers(chain.root).contains(m),
+      membersOf(rootMembers, chain.root).contains(m),
       acceptedWrites' = acceptedWrites.union(Set({ obj: obj, author: memberKey(m, 0), epoch: chain.epoch })),
       chain' = chain, local' = local, network' = network, orgKnows' = orgKnows,
       objToken' = objToken, tokenKnows' = tokenKnows, revoked' = revoked, nextTag' = nextTag,
+      rootMembers' = rootMembers, nextRoot' = nextRoot,
     }
   }
 
-  // NETWORK ADVERSARY: drop an in-flight envelope.
+  // NETWORK ADVERSARY: drop an envelope.
   action networkDrop = {
     nondet te = network.oneOf()
     all {
@@ -183,11 +162,11 @@ module protocol {
       network' = network.exclude(Set(te)),
       chain' = chain, local' = local, orgKnows' = orgKnows, objToken' = objToken,
       tokenKnows' = tokenKnows, revoked' = revoked, acceptedWrites' = acceptedWrites,
-      nextTag' = nextTag,
+      nextTag' = nextTag, rootMembers' = rootMembers, nextRoot' = nextRoot,
     }
   }
 
-  // NETWORK ADVERSARY: duplicate an in-flight envelope under a fresh tag.
+  // NETWORK ADVERSARY: duplicate an envelope under a fresh tag.
   action networkDuplicate = {
     nondet te = network.oneOf()
     all {
@@ -196,11 +175,11 @@ module protocol {
       nextTag' = nextTag + 1,
       chain' = chain, local' = local, orgKnows' = orgKnows, objToken' = objToken,
       tokenKnows' = tokenKnows, revoked' = revoked, acceptedWrites' = acceptedWrites,
+      rootMembers' = rootMembers, nextRoot' = nextRoot,
     }
   }
 
-  // REVOKED INSIDER: replay any in-flight envelope under a fresh tag (re-inject
-  // a stale delta/secret). Models the ex-member actively resending.
+  // REVOKED INSIDER: replay an in-flight envelope under a fresh tag.
   action revokedReplay = {
     nondet te = network.oneOf()
     all {
@@ -210,12 +189,12 @@ module protocol {
       nextTag' = nextTag + 1,
       chain' = chain, local' = local, orgKnows' = orgKnows, objToken' = objToken,
       tokenKnows' = tokenKnows, revoked' = revoked, acceptedWrites' = acceptedWrites,
+      rootMembers' = rootMembers, nextRoot' = nextRoot,
     }
   }
 
-  // REVOKED INSIDER: attempt a write with a stale (revoked) member key. The
-  // protocol's write-acceptance is gated on the author being a CURRENT member,
-  // so a revoked author is a no-op on acceptedWrites but still emits the WriteOp.
+  // REVOKED INSIDER: attempt a write with a stale key; never accepted (gated on
+  // current membership), but still emits the WriteOp envelope.
   action revokedAttemptWrite = {
     nondet p = revoked.oneOf()
     nondet obj = OBJECTS.oneOf()
@@ -224,24 +203,25 @@ module protocol {
       network' = network.union(Set({ tag: nextTag, env: WriteOp({ obj: obj, author: memberKey(p, 0), epoch: chain.epoch }) })),
       nextTag' = nextTag + 1,
       acceptedWrites' =
-        if (currentMembers(chain.root).contains(p))
+        if (membersOf(rootMembers, chain.root).contains(p))
           acceptedWrites.union(Set({ obj: obj, author: memberKey(p, 0), epoch: chain.epoch }))
         else acceptedWrites,
       chain' = chain, local' = local, orgKnows' = orgKnows, objToken' = objToken,
       tokenKnows' = tokenKnows, revoked' = revoked,
+      rootMembers' = rootMembers, nextRoot' = nextRoot,
     }
   }
 
-  // ROGUE ADMIN (< THRESHOLD): gossip a well-formed delta with NO on-chain
-  // update. It removes some current member from the CURRENT chain root, so its
-  // applied result will NOT equal chain.root and honest members must drop it.
+  // ROGUE ADMIN (< THRESHOLD): gossip a delta to a fresh (off-chain) root with no
+  // on-chain update. Its result id != chain.root, so honest members drop it.
   action rogueProposeDelta = {
-    nondet victim = chain.root.keys().oneOf()
-    val rogueRoot = removeOne(chain.root, victim)
-    val d = calculateDelta(chain.root, rogueRoot)
+    nondet victim = membersOf(rootMembers, chain.root).oneOf()
+    val r = nextRoot
     all {
-      chain.root.keys().size() > 1,
-      network' = network.union(Set({ tag: nextTag, env: DeltaMsg(d) })),
+      membersOf(rootMembers, chain.root).size() > 1,
+      rootMembers' = rootMembers.put(r, membersOf(rootMembers, chain.root).exclude(Set(victim))),
+      nextRoot' = r + 1,
+      network' = network.union(Set({ tag: nextTag, env: DeltaMsg({ base: chain.root, result: r }) })),
       nextTag' = nextTag + 1,
       chain' = chain, local' = local, orgKnows' = orgKnows, objToken' = objToken,
       tokenKnows' = tokenKnows, revoked' = revoked, acceptedWrites' = acceptedWrites,
@@ -261,13 +241,7 @@ module protocol {
     rogueProposeDelta,
   }
 
-  // LEMMA: a revoked principal never holds the CURRENT org-key generation secret.
-  val revokedExcludedFromOrgSecret =
-    (chain.orgGen > 0)
-      implies (getOrEmpty(orgKnows, chain.orgGen).intersect(revoked) == Set())
-
   // ---- Property 1: replay / fork safety ----
-  // Honest members at the same epoch hold the same root.
   val forkSafety =
     honestMembers.forall(m1 =>
       honestMembers.forall(m2 =>
@@ -275,28 +249,24 @@ module protocol {
           implies (local.get(m1).root == local.get(m2).root)))
 
   // ---- Property 2: revocation safety ----
-  // An object is "settled" when every CURRENT honest member has caught up to the
-  // chain epoch AND the object's CGKA token has been rotated AT/AFTER the current
-  // epoch (i.e. a rekey has occurred since the latest revocation). The epoch-stamp
-  // is essential: a token minted at an earlier epoch may still hold now-revoked
-  // members — that pre-rekey window is the transitive-trust τ-window (Milestone 3),
-  // NOT a revocation-safety violation. Using only `id != 0` would conflate the two
-  // and make the property fail spuriously (a removal need not force a same-step rekey).
   pure def isSettled(obj: str, ch: ChainState, lv: str -> LocalView,
-                     tok: str -> { id: int, epoch: int }): bool =
+                     tok: str -> { id: int, epoch: int }, rm: int -> Set[str]): bool =
     and {
-      currentMembers(ch.root).forall(m => lv.get(m).epoch == ch.epoch),
+      membersOf(rm, ch.root).forall(m => lv.get(m).epoch == ch.epoch),
       tok.get(obj).epoch >= ch.epoch,
     }
 
-  // For every settled object: no revoked principal holds its current token, and
-  // every accepted write on it (at the current epoch) is authored by a current member.
   val revocationSafety =
     OBJECTS.forall(obj =>
-      isSettled(obj, chain, local, objToken) implies and {
+      isSettled(obj, chain, local, objToken, rootMembers) implies and {
         tokenKnows.get(objToken.get(obj).id).intersect(revoked) == Set(),
         acceptedWrites.forall(w =>
           (w.obj == obj and w.epoch == chain.epoch)
-            implies currentMembers(chain.root).contains(w.author.owner)),
+            implies membersOf(rootMembers, chain.root).contains(w.author.owner)),
       })
+
+  // ---- Lemma: revoked never holds the current org secret ----
+  val revokedExcludedFromOrgSecret =
+    (chain.orgGen > 0)
+      implies (getOrEmpty(orgKnows, chain.orgGen).intersect(revoked) == Set())
 }

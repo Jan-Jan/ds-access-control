@@ -9,7 +9,7 @@ module ods_instances {
   // WITNESS 1 — revocationSafety is non-vacuous: a SETTLED object coexists with
   // a non-empty `revoked` set. (Violation => such a state is reachable.)
   val settledWithRevocationReachable =
-    not(OBJECTS.exists(o => isSettled(o, chain, local, objToken)) and revoked != Set())
+    not(OBJECTS.exists(o => isSettled(o, chain, local, objToken, rootMembers)) and revoked != Set())
 
   // WITNESS 2 — forkSafety is non-trivial: two honest members can sit at
   // DIFFERENT epochs (so the implication's antecedent is exercised, not vacuous).
