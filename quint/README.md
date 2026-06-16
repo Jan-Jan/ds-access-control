@@ -80,6 +80,11 @@ members in `cgkaRotate` breaks `revocationSafety`. Both produce simulator
 counterexamples.
 
 **Apalache `quint verify`** runs only in CI (the `apalache` job): it needs a JVM
-and a writable `~/.quint`, neither available in the dev sandbox. Locally, the
-`quint run --invariant` simulator is the property checker. Convergence and the
-τ-window property arrive in Milestone 3.
+and a writable `~/.quint`, neither available in the dev sandbox. All three
+invariants verify cleanly at `--max-steps=2` (~10s each), which is what CI runs.
+Depth is capped at 2 because the protocol state carries full trie `Snapshot` maps
+in `chain`/`local`/every network envelope, so Apalache's symbolic encoding
+explodes past 2 steps (depth 3+ does not terminate). The `quint run --invariant`
+simulator covers greater depth (thousands of samples); deeper Apalache
+verification needs the abstract-root remodel noted in the design spec's Phasing
+section. Convergence and the τ-window property arrive in Milestone 3.

@@ -389,6 +389,30 @@ The layered structure permits incremental delivery, each milestone small:
    rogue-admin adversaries; revocation safety and replay/fork safety.
 3. **τ-window and convergence** — add the `clock` machinery, the compromised-key
    adversary, the τ policies, and the quiescence/witness convergence checks.
+   **Also fold in the abstract-root remodel** (see below).
+
+### Abstract-root remodel (deferred from Milestone 2)
+
+Milestone 2's `protocol.qnt` carries full trie `Snapshot` maps in three places at
+once — `chain.root`, every `local[m].root`, and inside every network envelope
+(`DeltaMsg(Delta)` holds `baseRoot: Snapshot` + `Set[Leaf]`). The Quint simulator
+handles this fine (thousands of samples), but Apalache's symbolic encoding of
+"sets of records containing maps of records containing sets" explodes past **2
+unrolled steps** (depth 2 verifies in ~10s; depth 3+ does not terminate). So
+`quint verify` currently gives a genuine but shallow (≤2-step) bounded proof, and
+the CI `apalache` job is pinned to `--max-steps=2` for that reason.
+
+To make Apalache verification tractable at useful depths, push the
+snapshot-as-root abstraction **all the way into the protocol layer**: represent a
+root as an opaque token (e.g. an `int` id or a free-typed root handle) in
+`chain`/`local`/`Delta`, and keep the rich `Snapshot`/`Leaf` semantics confined to
+`membership.qnt` (already covered by the simulator + the MBT conformance harness).
+The protocol layer reasons only about root *identity* and *anchoring* — which is
+all `forkSafety`/`revocationSafety` need (they compare roots for equality and check
+chain-anchoring, never inspect leaf contents). This shrinks the protocol state
+dramatically and should let `quint verify` reach the depths the simulator already
+explores. Treat the membership↔protocol boundary (an abstraction function from a
+concrete `Snapshot` to its abstract root id) as the thing the MBT layer pins down.
 
 ## Open questions
 
