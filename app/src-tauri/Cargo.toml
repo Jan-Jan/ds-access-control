@@ -1,0 +1,31 @@
+[workspace]
+
+[package]
+name = "ods-poc"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+publish = false
+
+[lib]
+name = "ods_poc_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros"] }
+hex = "0.4"
+async-trait = "0.1"
+rand = "0.8"
+postcard = { version = "1", features = ["use-std"] }
+iroh = { version = "0.98" }
+# Needed by state.rs connect_chain (only used when ODS_CHAIN_WS is set at runtime).
+subxt = { version = "0.50", default-features = false, features = ["native", "jsonrpsee"] }
+subxt-signer = { version = "0.50", default-features = false, features = ["sr25519", "subxt"] }
+on-chain-client = { path = "../../on-chain-client", default-features = false, features = ["dev-rpc"] }
+org-node = { path = "../../org-node", features = ["app"] }

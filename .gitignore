@@ -2,5 +2,5 @@
 # Stray compiler probe output (see fuzz work, 2026-06)
 rust_out
 target
-
+Cargo.lock
 .claude/worktrees

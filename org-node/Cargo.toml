@@ -1,0 +1,88 @@
+[package]
+name = "org-node"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+license = "GPL-3.0-only"
+description = "ODS Phase 2 node logic: signing, envelopes, and verify-against-chain over the org-members trie"
+publish = false
+
+[features]
+default = []
+# On-chain reads (via on-chain-client) + writes (via subxt). Pulls a large
+# async stack; the Phase 2.1 core builds and tests without it.
+chain = ["dep:subxt", "dep:subxt-signer", "dep:tokio", "dep:on-chain-client", "dep:blake2", "dep:parity-scale-codec", "dep:async-trait", "dep:hex"]
+# Device-to-device transport over iroh QUIC (NodeId = P2pDeviceKey).
+transport = ["dep:iroh", "dep:tokio"]
+# Full node-app integration: chain + transport + encrypted persistence + out-of-band blobs.
+app = ["chain", "transport", "dep:chacha20poly1305", "dep:argon2", "dep:base64"]
+
+[dependencies]
+org-members = { path = "../org-members", default-features = false, features = ["std", "serde"] }
+ed25519-dalek = { version = "2", default-features = false, features = ["alloc", "rand_core", "zeroize"] }
+postcard = { version = "1", features = ["alloc", "use-std"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = { version = "2", default-features = false }
+rand_core = "0.6"
+# Features mirror on-chain-client's pins so the subxt types unify across crates.
+subxt = { version = "0.50", default-features = false, features = ["native", "jsonrpsee"], optional = true }
+subxt-signer = { version = "0.50", default-features = false, features = ["sr25519", "subxt"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
+on-chain-client = { path = "../on-chain-client", default-features = false, features = ["dev-rpc"], optional = true }
+blake2 = { version = "0.10", optional = true }
+parity-scale-codec = { version = "3", default-features = false, features = ["derive"], optional = true }
+async-trait = { version = "0.1", optional = true }
+hex = { version = "0.4", optional = true }
+iroh = { version = "0.98", optional = true }
+chacha20poly1305 = { version = "0.10", optional = true }
+argon2 = { version = "0.5", optional = true }
+base64 = { version = "0.22", optional = true }
+
+[dev-dependencies]
+rand = "0.8"
+# The e2e test needs tokio's macros even when running `--features chain`.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+# bolero 0.13 matches the version used in on-chain-client (the repo's other fuzz targets).
+bolero = "0.13"
+# org-members is also a normal [dependency], but integration test crates cannot
+# see the library's normal deps directly — re-declared here so fuzz_verify_against_chain
+# can name org_members::trie::OrgTrie, org_members::MemberLeaf, etc.
+org-members = { path = "../org-members", features = ["std", "serde"] }
+# Chain e2e test harness (chain_genesis_e2e): chopsticks spawn + subxt client.
+# These mirror on-chain-client's dev-dependencies for the same helpers.
+jsonrpsee = { version = "0.26", default-features = false, features = ["ws-client", "http-client"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+libc = "0.2"
+hex = "0.4"
+async-trait = "0.1"
+subxt-signer = { version = "0.50", default-features = false, features = ["sr25519", "subxt"] }
+on-chain-client = { path = "../on-chain-client", default-features = false, features = ["dev-rpc"] }
+subxt = { version = "0.50", default-features = false, features = ["native", "jsonrpsee"] }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "fuzz_envelope_decode"
+path = "tests/fuzz_envelope_decode/fuzz_target.rs"
+harness = false
+
+[[test]]
+name = "fuzz_verify_against_chain"
+path = "tests/fuzz_verify_against_chain/fuzz_target.rs"
+harness = false
+
+[[test]]
+name = "chain_genesis_e2e"
+path = "tests/chain_genesis_e2e.rs"
+required-features = ["chain"]
+
+[[test]]
+name = "transport_handshake"
+path = "tests/transport_handshake.rs"
+required-features = ["transport"]
+
+[[test]]
+name = "service_stories"
+path = "tests/service_stories.rs"
+required-features = ["app"]

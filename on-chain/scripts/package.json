@@ -6,6 +6,10 @@
     "@acala-network/chopsticks": "^1.4.0",
     "@polkadot/api": "^16",
     "@polkadot/util": "^14",
-    "@polkadot/util-crypto": "^14"
+    "@polkadot/util-crypto": "^14",
+    "sqlite3": "^6.0.1"
+  },
+  "allowScripts": {
+    "sqlite3@6.0.1": true
   }
 }
